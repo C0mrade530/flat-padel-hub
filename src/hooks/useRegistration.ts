@@ -6,7 +6,7 @@ import { toast } from '@/hooks/use-toast';
 interface UseRegistrationResult {
   register: (eventId: string, price: number) => Promise<boolean>;
   cancel: (eventId: string) => Promise<boolean>;
-  checkRegistration: (eventId: string) => Promise<boolean>;
+  checkRegistration: (eventId: string) => Promise<'confirmed' | 'waiting' | null>;
   loading: boolean;
 }
 
@@ -14,18 +14,21 @@ export const useRegistration = (): UseRegistrationResult => {
   const { user } = useUser();
   const [loading, setLoading] = useState(false);
 
-  const checkRegistration = async (eventId: string): Promise<boolean> => {
-    if (!user) return false;
+  const checkRegistration = async (eventId: string): Promise<'confirmed' | 'waiting' | null> => {
+    if (!user) return null;
 
     const { data } = await supabase
       .from('event_participants')
-      .select('id')
+      .select('id, status')
       .eq('event_id', eventId)
       .eq('user_id', user.id)
       .neq('status', 'canceled')
       .maybeSingle();
 
-    return !!data;
+    if (data && (data.status === 'confirmed' || data.status === 'waiting')) {
+      return data.status;
+    }
+    return null;
   };
 
   const register = async (eventId: string, price: number): Promise<boolean> => {
@@ -42,8 +45,8 @@ export const useRegistration = (): UseRegistrationResult => {
 
     try {
       // 1. Check if already registered
-      const isRegistered = await checkRegistration(eventId);
-      if (isRegistered) {
+      const registrationStatus = await checkRegistration(eventId);
+      if (registrationStatus) {
         toast({
           title: 'Уже записаны',
           description: 'Вы уже записаны на это событие',

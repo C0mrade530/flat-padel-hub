@@ -12,7 +12,7 @@ import { haptic, openLink } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
 
 const ProfileScreen = () => {
-  const { user, loading, isDevMode, refetch } = useUser();
+  const { user, loading, isDevMode, refetchUser } = useUser();
   const [levelModalOpen, setLevelModalOpen] = useState(false);
   const [preferencesModalOpen, setPreferencesModalOpen] = useState(false);
   const [notifications, setNotifications] = useState(true);
@@ -248,7 +248,7 @@ const ProfileScreen = () => {
         currentLevel={currentLevel}
         onSelect={(level) => {
           setCurrentLevel(level);
-          refetch();
+          refetchUser();
         }}
       />
       <PreferencesModal isOpen={preferencesModalOpen} onClose={() => setPreferencesModalOpen(false)} />
