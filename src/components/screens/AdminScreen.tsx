@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -5,10 +6,20 @@ import { GlassButton } from "@/components/ui/GlassButton";
 import { Settings, Plus, CreditCard, ClipboardList, Users, ChevronRight, TrendingUp, AlertCircle } from "lucide-react";
 import { useAdminStats } from "@/hooks/useAdminStats";
 import { useUser } from "@/contexts/UserContext";
+import { CreateEventSheet } from "@/components/admin/CreateEventSheet";
+import { PendingPaymentsSheet } from "@/components/admin/PendingPaymentsSheet";
+import { AllEventsSheet } from "@/components/admin/AllEventsSheet";
+import { UsersSheet } from "@/components/admin/UsersSheet";
+import { haptic } from "@/lib/telegram";
 
 const AdminScreen = () => {
   const { isAdmin, isDevMode } = useUser();
   const { stats, loading, error, refetch } = useAdminStats();
+  
+  const [createEventOpen, setCreateEventOpen] = useState(false);
+  const [pendingPaymentsOpen, setPendingPaymentsOpen] = useState(false);
+  const [allEventsOpen, setAllEventsOpen] = useState(false);
+  const [usersOpen, setUsersOpen] = useState(false);
 
   const menuItems = [
     {
@@ -17,6 +28,10 @@ const AdminScreen = () => {
       label: "Ожидают оплаты",
       badge: stats.pendingPayments,
       badgeType: "error" as const,
+      onClick: () => {
+        haptic.impact("light");
+        setPendingPaymentsOpen(true);
+      },
     },
     {
       id: "events",
@@ -24,6 +39,10 @@ const AdminScreen = () => {
       label: "Все события",
       badge: undefined,
       badgeType: undefined,
+      onClick: () => {
+        haptic.impact("light");
+        setAllEventsOpen(true);
+      },
     },
     {
       id: "users",
@@ -31,6 +50,10 @@ const AdminScreen = () => {
       label: "Пользователи",
       badge: undefined,
       badgeType: undefined,
+      onClick: () => {
+        haptic.impact("light");
+        setUsersOpen(true);
+      },
     },
   ];
 
@@ -56,7 +79,6 @@ const AdminScreen = () => {
 
   return (
     <div className="min-h-screen pb-24 px-4 pt-safe-top">
-      {/* Dev mode indicator */}
       {isDevMode && (
         <motion.div
           className="mt-4 p-2 rounded-lg bg-warning/10 border border-warning/20 text-center"
@@ -67,7 +89,6 @@ const AdminScreen = () => {
         </motion.div>
       )}
 
-      {/* Header */}
       <motion.header
         className="pt-8 mb-6"
         initial={{ opacity: 0, y: -20 }}
@@ -76,23 +97,17 @@ const AdminScreen = () => {
       >
         <div className="flex items-center gap-3 mb-2">
           <Settings className="w-6 h-6 text-primary" />
-          <h1 className="text-2xl font-semibold text-foreground text-tight">
-            Управление
-          </h1>
+          <h1 className="text-2xl font-semibold text-foreground text-tight">Управление</h1>
         </div>
       </motion.header>
 
-      {/* Error state */}
       {error && (
         <div className="text-center py-6 mb-6">
           <p className="text-destructive mb-4">{error}</p>
-          <button onClick={refetch} className="text-primary underline">
-            Попробовать снова
-          </button>
+          <button onClick={refetch} className="text-primary underline">Попробовать снова</button>
         </div>
       )}
 
-      {/* Stats Grid */}
       <motion.div
         className="grid grid-cols-2 gap-3 mb-6"
         initial={{ opacity: 0, y: 20 }}
@@ -104,12 +119,8 @@ const AdminScreen = () => {
             <Users className="w-4 h-4 text-primary" />
             <TrendingUp className="w-3 h-3 text-success" />
           </div>
-          <div className="text-3xl font-bold text-foreground mb-1">
-            {stats.playersToday}
-          </div>
-          <div className="text-xs text-foreground-tertiary uppercase tracking-wide">
-            Игроков сегодня
-          </div>
+          <div className="text-3xl font-bold text-foreground mb-1">{stats.playersToday}</div>
+          <div className="text-xs text-foreground-tertiary uppercase tracking-wide">Игроков сегодня</div>
         </GlassCard>
 
         <GlassCard className="p-4" gradient>
@@ -121,13 +132,10 @@ const AdminScreen = () => {
             {stats.revenue.toLocaleString("ru-RU")}
             <span className="text-lg text-foreground-secondary ml-1">₽</span>
           </div>
-          <div className="text-xs text-foreground-tertiary uppercase tracking-wide">
-            Выручка
-          </div>
+          <div className="text-xs text-foreground-tertiary uppercase tracking-wide">Выручка</div>
         </GlassCard>
       </motion.div>
 
-      {/* Create Event CTA */}
       <motion.div
         className="mb-6"
         initial={{ opacity: 0, y: 20 }}
@@ -139,12 +147,15 @@ const AdminScreen = () => {
           size="lg" 
           fullWidth
           icon={<Plus className="w-5 h-5" />}
+          onClick={() => {
+            haptic.impact("medium");
+            setCreateEventOpen(true);
+          }}
         >
           Создать событие
         </GlassButton>
       </motion.div>
 
-      {/* Menu */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -159,6 +170,7 @@ const AdminScreen = () => {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.5 + index * 0.05 }}
               whileTap={{ scale: 0.98 }}
+              onClick={item.onClick}
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -169,12 +181,7 @@ const AdminScreen = () => {
               <div className="flex items-center gap-2">
                 {item.badge !== undefined && item.badge > 0 && (
                   <motion.span
-                    className={`
-                      px-2 py-0.5 text-xs font-medium rounded-full
-                      ${item.badgeType === "error" 
-                        ? "bg-destructive/20 text-destructive" 
-                        : "bg-primary/20 text-primary"}
-                    `}
+                    className="px-2 py-0.5 text-xs font-medium rounded-full bg-destructive/20 text-destructive"
                     animate={{ scale: [1, 1.1, 1] }}
                     transition={{ duration: 1, repeat: Infinity }}
                   >
@@ -188,17 +195,24 @@ const AdminScreen = () => {
         </GlassCard>
       </motion.div>
 
-      {/* Quick actions hint */}
-      <motion.div
-        className="mt-8 p-4 rounded-2xl bg-primary/5 border border-primary/10"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.7 }}
-      >
-        <p className="text-sm text-foreground-secondary text-center">
-          💡 Совет: используйте быстрые действия свайпом влево на карточках событий
-        </p>
-      </motion.div>
+      {/* Sheets */}
+      <CreateEventSheet 
+        isOpen={createEventOpen} 
+        onClose={() => setCreateEventOpen(false)}
+        onCreated={() => refetch()}
+      />
+      <PendingPaymentsSheet 
+        isOpen={pendingPaymentsOpen} 
+        onClose={() => setPendingPaymentsOpen(false)}
+      />
+      <AllEventsSheet 
+        isOpen={allEventsOpen} 
+        onClose={() => setAllEventsOpen(false)}
+      />
+      <UsersSheet 
+        isOpen={usersOpen} 
+        onClose={() => setUsersOpen(false)}
+      />
     </div>
   );
 };
