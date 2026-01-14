@@ -178,7 +178,7 @@ const EventDetail = ({
         <>
           {/* Backdrop */}
           <motion.div
-            className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40"
+            className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -187,7 +187,7 @@ const EventDetail = ({
 
           {/* Bottom Sheet */}
           <motion.div
-            className="fixed bottom-0 left-0 right-0 z-40 max-h-[85vh] flex flex-col"
+            className="fixed bottom-0 left-0 right-0 z-50 h-[80vh] flex flex-col"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
@@ -202,66 +202,66 @@ const EventDetail = ({
               }
             }}
           >
-            <div className="glass-card rounded-t-3xl flex flex-col max-h-[85vh]">
+            <div className="bg-[#0a0f1a] rounded-t-[28px] border-t border-emerald-500/20 flex flex-col h-full overflow-hidden">
+              {/* Drag Handle */}
+              <div 
+                className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing flex-shrink-0"
+                onPointerDown={(e) => dragControls.start(e)}
+              >
+                <div className="w-12 h-1.5 rounded-full bg-white/20" />
+              </div>
+
+              {/* Close Button */}
+              <button
+                onClick={handleClose}
+                className="absolute top-4 right-4 p-2 rounded-full glass hover:bg-primary/10 transition-colors z-10"
+              >
+                <X className="w-5 h-5 text-foreground-secondary" />
+              </button>
+
+              {/* Header */}
+              <div className="px-6 pb-4 text-center flex-shrink-0">
+                <span className="text-5xl mb-2 block">{eventTypeEmoji[event.type]}</span>
+                <h2 className="text-2xl font-bold text-foreground uppercase tracking-wide">
+                  {eventTypeLabel[event.type]}
+                </h2>
+                <p className="text-foreground-secondary">Уровень: {event.level}</p>
+              </div>
+
               {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto p-6 pt-4 pb-4">
-                {/* Drag Handle */}
-                <div 
-                  className="flex justify-center mb-4 cursor-grab active:cursor-grabbing py-2"
-                  onPointerDown={(e) => dragControls.start(e)}
-                >
-                  <div className="w-12 h-1.5 rounded-full bg-foreground-tertiary/30" />
-                </div>
-
-                {/* Close Button */}
-                <button
-                  onClick={handleClose}
-                  className="absolute top-4 right-4 p-2 rounded-full glass hover:bg-primary/10 transition-colors"
-                >
-                  <X className="w-5 h-5 text-foreground-secondary" />
-                </button>
-
-                {/* Event Header */}
-                <div className="text-center mb-6">
-                  <span className="text-4xl mb-2 block">{eventTypeEmoji[event.type]}</span>
-                  <h2 className="text-2xl font-bold text-foreground text-tight uppercase tracking-wide">
-                    {eventTypeLabel[event.type]}
-                  </h2>
-                  <p className="text-foreground-secondary">Уровень: {event.level}</p>
-                </div>
-
+              <div className="flex-1 overflow-y-auto px-4 space-y-4">
                 {/* Event Info Grid */}
-                <div className="grid grid-cols-2 gap-3 mb-6">
+                <div className="grid grid-cols-2 gap-3">
                   <GlassCard className="p-4 text-center" hover={false}>
-                    <Calendar className="w-6 h-6 text-primary mx-auto mb-2" />
-                    <div className="text-lg font-semibold text-foreground">{day} {month}</div>
-                    <div className="text-sm text-foreground-secondary capitalize">{weekday}</div>
+                    <Calendar className="w-6 h-6 text-emerald-400 mx-auto mb-2" />
+                    <p className="font-semibold text-lg text-foreground">{day} {month}</p>
+                    <p className="text-sm text-muted-foreground capitalize">{weekday}</p>
                   </GlassCard>
 
                   <GlassCard className="p-4 text-center" hover={false}>
-                    <Clock className="w-6 h-6 text-primary mx-auto mb-2" />
-                    <div className="text-lg font-semibold text-foreground">{event.startTime}</div>
-                    <div className="text-sm text-foreground-secondary">2 часа</div>
+                    <Clock className="w-6 h-6 text-emerald-400 mx-auto mb-2" />
+                    <p className="font-semibold text-lg text-foreground">{event.startTime}</p>
+                    <p className="text-sm text-muted-foreground">2 часа</p>
                   </GlassCard>
 
                   <GlassCard className="p-4 text-center" hover={false}>
-                    <MapPin className="w-6 h-6 text-primary mx-auto mb-2" />
-                    <div className="text-lg font-semibold text-foreground">{event.location.split(" ")[0]}</div>
-                    <div className="text-sm text-foreground-secondary">{event.location.split(" ").slice(1).join(" ")}</div>
+                    <MapPin className="w-6 h-6 text-emerald-400 mx-auto mb-2" />
+                    <p className="font-semibold text-foreground">{event.location.split(" ")[0]}</p>
+                    <p className="text-sm text-muted-foreground">{event.location.split(" ").slice(1).join(" ") || "Moscow"}</p>
                   </GlassCard>
 
                   <GlassCard className="p-4 text-center" hover={false}>
-                    <Users className="w-6 h-6 text-primary mx-auto mb-2" />
-                    <div className="text-lg font-semibold text-foreground">{event.currentSeats} / {event.maxSeats}</div>
-                    <div className="text-sm text-foreground-secondary">мест</div>
+                    <Users className="w-6 h-6 text-emerald-400 mx-auto mb-2" />
+                    <p className="font-semibold text-lg text-foreground">{event.currentSeats} / {event.maxSeats}</p>
+                    <p className="text-sm text-emerald-400">{availableSeats} мест свободно</p>
                   </GlassCard>
                 </div>
 
                 {/* Price Display */}
                 {event.price > 0 && (
-                  <div className="flex items-center justify-between p-4 bg-primary/5 rounded-xl mb-6 border border-primary/10">
-                    <span className="text-foreground-secondary">Стоимость</span>
-                    <span className="text-2xl font-bold text-primary">
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20">
+                    <span className="text-muted-foreground font-medium">Стоимость</span>
+                    <span className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
                       {event.price.toLocaleString('ru-RU')} ₽
                     </span>
                   </div>
@@ -269,8 +269,8 @@ const EventDetail = ({
 
                 {/* Participants */}
                 {event.participants && event.participants.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-sm font-medium text-foreground-secondary mb-3 uppercase tracking-wide">Участники</h3>
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wide">Участники</h3>
                     <GlassCard className="p-4" hover={false}>
                       <div className="flex items-center">
                         <div className="flex -space-x-2">
@@ -279,7 +279,7 @@ const EventDetail = ({
                           ))}
                         </div>
                         {event.participants.length > 6 && (
-                          <span className="ml-3 text-sm text-foreground-secondary">+{event.participants.length - 6}</span>
+                          <span className="ml-3 text-sm text-muted-foreground">+{event.participants.length - 6}</span>
                         )}
                       </div>
                     </GlassCard>
@@ -288,16 +288,16 @@ const EventDetail = ({
 
                 {/* Description */}
                 {event.description && (
-                  <div className="mb-6">
-                    <h3 className="text-sm font-medium text-foreground-secondary mb-3 uppercase tracking-wide">Описание</h3>
-                    <p className="text-foreground-secondary leading-relaxed">{event.description}</p>
+                  <div className="pb-4">
+                    <h3 className="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wide">Описание</h3>
+                    <p className="text-muted-foreground leading-relaxed">{event.description}</p>
                   </div>
                 )}
               </div>
 
-              {/* Fixed Bottom CTA */}
-              <div className="sticky bottom-0 p-4 bg-background/95 backdrop-blur-lg border-t border-primary/10 safe-bottom">
-                {!isRegistered && !isWaiting && (
+              {/* Fixed Bottom CTA - always visible, above everything */}
+              <div className="flex-shrink-0 p-4 pt-3 border-t border-white/10 bg-[#0a0f1a]">
+                {!isRegistered && !isWaiting ? (
                   <GlassButton
                     variant="primary"
                     fullWidth
@@ -307,33 +307,34 @@ const EventDetail = ({
                   >
                     {isLoading ? 'Записываем...' : isFull ? 'Встать в очередь' : `Записаться • ${event.price.toLocaleString('ru-RU')} ₽`}
                   </GlassButton>
-                )}
-
-                {isRegistered && (
+                ) : isRegistered ? (
                   <div className="space-y-3">
-                    <div className="bg-emerald-500/20 border border-emerald-500/30 rounded-xl p-3 text-center">
-                      <p className="text-emerald-400 font-medium">✅ Вы записаны!</p>
+                    {/* Registered status */}
+                    <div className="bg-gradient-to-r from-emerald-500/20 to-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-emerald-400 font-semibold">Вы записаны</span>
+                      </div>
                     </div>
 
                     {pendingPayment && (
-                      <GlassButton variant="primary" fullWidth onClick={handlePayClick} loading={paymentLoading}>
+                      <GlassButton variant="primary" fullWidth size="lg" onClick={handlePayClick} loading={paymentLoading}>
                         💳 Оплатить • {event.price.toLocaleString('ru-RU')} ₽
                       </GlassButton>
                     )}
 
-                    <GlassButton variant="ghost" fullWidth onClick={handleCancel} className="text-red-400" loading={isLoading}>
-                      Отменить запись
+                    <GlassButton variant="ghost" fullWidth onClick={handleCancel} loading={isLoading}>
+                      <span className="text-red-400">Отменить запись</span>
                     </GlassButton>
                   </div>
-                )}
-
-                {isWaiting && (
+                ) : (
                   <div className="space-y-3">
-                    <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-xl p-3 text-center">
-                      <p className="text-yellow-400 font-medium">⏳ Вы #{queuePosition} в очереди</p>
+                    {/* Queue status */}
+                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-center">
+                      <span className="text-yellow-400">⏳ Вы #{queuePosition} в очереди</span>
                     </div>
-                    <GlassButton variant="ghost" fullWidth onClick={handleCancel} className="text-red-400" loading={isLoading}>
-                      Покинуть очередь
+                    <GlassButton variant="ghost" fullWidth onClick={handleCancel} loading={isLoading}>
+                      <span className="text-red-400">Покинуть очередь</span>
                     </GlassButton>
                   </div>
                 )}
