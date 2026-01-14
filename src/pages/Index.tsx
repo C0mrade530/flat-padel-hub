@@ -1,12 +1,54 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from "react";
+import { AnimatePresence } from "framer-motion";
+import { SplashScreen } from "@/components/screens/SplashScreen";
+import { HomeScreen } from "@/components/screens/HomeScreen";
+import { BookingsScreen } from "@/components/screens/BookingsScreen";
+import { ProfileScreen } from "@/components/screens/ProfileScreen";
+import { AdminScreen } from "@/components/screens/AdminScreen";
+import { BottomNav } from "@/components/layout/BottomNav";
 
 const Index = () => {
+  const [showSplash, setShowSplash] = useState(true);
+  const [activeTab, setActiveTab] = useState("home");
+
+  const renderScreen = () => {
+    switch (activeTab) {
+      case "home":
+        return <HomeScreen userName="Леонид" />;
+      case "bookings":
+        return <BookingsScreen />;
+      case "profile":
+        return <ProfileScreen />;
+      case "admin":
+        return <AdminScreen />;
+      default:
+        return <HomeScreen userName="Леонид" />;
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-background">
+      <AnimatePresence>
+        {showSplash && (
+          <SplashScreen onComplete={() => setShowSplash(false)} />
+        )}
+      </AnimatePresence>
+
+      {!showSplash && (
+        <>
+          <AnimatePresence mode="wait">
+            <div key={activeTab}>
+              {renderScreen()}
+            </div>
+          </AnimatePresence>
+          
+          <BottomNav
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            isAdmin={true}
+          />
+        </>
+      )}
     </div>
   );
 };
