@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useDragControls } from "framer-motion";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { GlassButton } from "@/components/ui/GlassButton";
 import { Avatar } from "@/components/ui/GlassAvatar";
-import { Calendar, Clock, MapPin, Users, X } from "lucide-react";
+import { Calendar, Clock, MapPin, Users, X, Share2 } from "lucide-react";
 import { haptic } from "@/lib/telegram";
 import { useUser } from "@/contexts/UserContext";
 import { useRegistration } from "@/hooks/useRegistration";
@@ -172,6 +172,27 @@ const EventDetail = ({
     );
   };
 
+  const handleShare = async () => {
+    haptic.impact("light");
+    const botUsername = 'FlatPadelBot'; // Replace with your bot username
+    const shareUrl = `https://t.me/${botUsername}?startapp=event_${event.id}`;
+    const { day, month } = formatDate(event.date);
+    const shareText = `${eventTypeEmoji[event.type]} ${eventTypeLabel[event.type]}\n📅 ${day} ${month} в ${event.startTime}\n📍 ${event.location}\n💰 ${event.price.toLocaleString('ru-RU')} ₽`;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({ title: 'Ссылка скопирована!', description: 'Отправьте её участнику' });
+    } catch {
+      // Fallback for mobile
+      const tg = (window as any).Telegram?.WebApp;
+      if (tg) {
+        tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`);
+      } else {
+        toast({ title: 'Не удалось скопировать', variant: 'destructive' });
+      }
+    }
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -211,13 +232,23 @@ const EventDetail = ({
                 <div className="w-12 h-1.5 rounded-full bg-white/20" />
               </div>
 
-              {/* Close Button */}
-              <button
-                onClick={handleClose}
-                className="absolute top-4 right-4 p-2 rounded-full glass hover:bg-primary/10 transition-colors z-10"
-              >
-                <X className="w-5 h-5 text-foreground-secondary" />
-              </button>
+              {/* Header Buttons */}
+              <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+                {/* Share Button */}
+                <button
+                  onClick={handleShare}
+                  className="p-2 rounded-full glass hover:bg-primary/10 transition-colors"
+                >
+                  <Share2 className="w-5 h-5 text-primary" />
+                </button>
+                {/* Close Button */}
+                <button
+                  onClick={handleClose}
+                  className="p-2 rounded-full glass hover:bg-primary/10 transition-colors"
+                >
+                  <X className="w-5 h-5 text-foreground-secondary" />
+                </button>
+              </div>
 
               {/* Header */}
               <div className="px-6 pb-4 text-center flex-shrink-0">
