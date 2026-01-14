@@ -24,7 +24,7 @@ const BottomNav = ({ activeTab, onTabChange, isAdmin = false }: BottomNavProps) 
 
   return (
     <motion.nav
-      className="fixed bottom-0 left-0 right-0 z-50 glass border-t border-primary/10 safe-bottom"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0f1a]/98 backdrop-blur-xl border-t border-emerald-500/20 pb-[env(safe-area-inset-bottom)]"
       initial={{ y: 100 }}
       animate={{ y: 0 }}
       transition={{ type: "spring", stiffness: 400, damping: 30, delay: 0.2 }}

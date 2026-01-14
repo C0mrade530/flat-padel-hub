@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Search, RefreshCw } from "lucide-react";
 import { GlassInput } from "@/components/ui/GlassInput";
@@ -7,7 +7,6 @@ import { EventCard } from "@/components/events/EventCard";
 import { EventDetail } from "@/components/events/EventDetail";
 import { EventCardSkeleton } from "@/components/ui/skeleton";
 import { useEvents, TransformedEvent } from "@/hooks/useEvents";
-import { useRegistration } from "@/hooks/useRegistration";
 import { useUser } from "@/contexts/UserContext";
 import { haptic } from "@/lib/telegram";
 
@@ -21,30 +20,13 @@ const filters = [
 const HomeScreen = () => {
   const { user } = useUser();
   const { events, loading, error, refetch } = useEvents();
-  const { register, cancel, checkRegistration, loading: registering } = useRegistration();
   
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [selectedEvent, setSelectedEvent] = useState<TransformedEvent | null>(null);
-  const [isRegistered, setIsRegistered] = useState(false);
-  const [registrationStatus, setRegistrationStatus] = useState<'confirmed' | 'waiting' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const userName = user?.display_name?.split(' ')[0] || 'Игрок';
-
-  // Check registration status when event is selected
-  useEffect(() => {
-    const checkStatus = async () => {
-      if (selectedEvent && user) {
-        const status = await checkRegistration(selectedEvent.id);
-        setIsRegistered(!!status);
-        if (status) {
-          setRegistrationStatus(status);
-        }
-      }
-    };
-    checkStatus();
-  }, [selectedEvent, user, checkRegistration]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -88,30 +70,6 @@ const HomeScreen = () => {
     acc[group].push(event);
     return acc;
   }, {} as Record<string, TransformedEvent[]>);
-
-  const handleRegister = async () => {
-    if (!selectedEvent) return;
-    
-    haptic.impact("medium");
-    const success = await register(selectedEvent.id, selectedEvent.price);
-    if (success) {
-      setIsRegistered(true);
-      haptic.notification("success");
-      refetch();
-    }
-  };
-
-  const handleCancel = async () => {
-    if (!selectedEvent) return;
-    
-    haptic.impact("medium");
-    const success = await cancel(selectedEvent.id);
-    if (success) {
-      setIsRegistered(false);
-      setRegistrationStatus(null);
-      refetch();
-    }
-  };
 
   const handleEventClick = (event: TransformedEvent) => {
     haptic.impact("light");
@@ -243,16 +201,8 @@ const HomeScreen = () => {
         <EventDetail
           event={selectedEvent}
           isOpen={!!selectedEvent}
-          onClose={() => {
-            setSelectedEvent(null);
-            setIsRegistered(false);
-            setRegistrationStatus(null);
-          }}
-          onRegister={handleRegister}
-          onCancel={handleCancel}
-          isRegistered={isRegistered}
-          registrationStatus={registrationStatus}
-          isLoading={registering}
+          onClose={() => setSelectedEvent(null)}
+          onEventsRefetch={refetch}
         />
       )}
     </div>
