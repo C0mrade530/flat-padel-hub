@@ -33,20 +33,34 @@ export const useRegistration = (): UseRegistrationResult => {
 
   const register = async (eventId: string, price: number): Promise<boolean> => {
     if (!user) {
+      console.error('Registration failed: No user');
       toast({
         title: 'Ошибка',
-        description: 'Необходимо авторизоваться',
+        description: 'Пользователь не найден',
         variant: 'destructive',
       });
       return false;
     }
 
+    console.log('Registering:', { eventId, userId: user.id, price });
     setLoading(true);
 
     try {
       // 1. Check if already registered
-      const registrationStatus = await checkRegistration(eventId);
-      if (registrationStatus) {
+      const { data: existingReg, error: existingError } = await supabase
+        .from('event_participants')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('user_id', user.id)
+        .neq('status', 'canceled')
+        .maybeSingle();
+
+      if (existingError) {
+        console.error('Error checking existing registration:', existingError);
+      }
+
+      if (existingReg) {
+        console.log('Already registered:', existingReg);
         toast({
           title: 'Уже записаны',
           description: 'Вы уже записаны на это событие',
@@ -61,14 +75,24 @@ export const useRegistration = (): UseRegistrationResult => {
         .eq('id', eventId)
         .single();
 
-      if (eventError || !event) {
-        throw eventError || new Error('Event not found');
+      if (eventError) {
+        console.error('Event fetch error:', eventError);
+        throw new Error('Событие не найдено');
       }
+
+      if (!event) {
+        console.error('Event not found');
+        throw new Error('Событие не найдено');
+      }
+
+      console.log('Event data:', event);
 
       const currentSeats = (event as any).current_seats as number;
       const maxSeats = (event as any).max_seats as number;
       const hasSeats = currentSeats < maxSeats;
       const participantStatus = hasSeats ? 'confirmed' : 'waiting';
+
+      console.log('Seats check:', { currentSeats, maxSeats, hasSeats, participantStatus });
       
       // 3. Calculate queue position if waiting
       let queuePosition: number | null = null;
@@ -80,28 +104,49 @@ export const useRegistration = (): UseRegistrationResult => {
           .eq('status', 'waiting');
         
         queuePosition = (count || 0) + 1;
+        console.log('Queue position:', queuePosition);
       }
 
       // 4. Create participant record
+      const participantData = {
+        event_id: eventId,
+        user_id: user.id,
+        status: participantStatus,
+        queue_position: queuePosition,
+      };
+      console.log('Creating participant:', participantData);
+
       const { data: participant, error: participantError } = await supabase
         .from('event_participants')
-        .insert({
-          event_id: eventId,
-          user_id: user.id,
-          status: participantStatus,
-          queue_position: queuePosition,
-          registered_at: new Date().toISOString(),
-        })
+        .insert(participantData)
         .select()
         .single();
 
-      if (participantError || !participant) {
-        throw participantError || new Error('Failed to create participant');
+      if (participantError) {
+        console.error('Participant creation error:', participantError);
+        throw participantError;
       }
 
-      // 5. Create payment if price > 0
+      console.log('Participant created:', participant);
+
+      // 5. Update current_seats if confirmed
+      if (hasSeats) {
+        const { error: updateError } = await supabase
+          .from('events')
+          .update({ current_seats: currentSeats + 1 })
+          .eq('id', eventId);
+
+        if (updateError) {
+          console.error('Failed to update seats:', updateError);
+        } else {
+          console.log('Seats updated:', currentSeats + 1);
+        }
+      }
+
+      // 6. Create payment if price > 0
       if (price > 0) {
-        const { error: paymentError } = await supabase
+        console.log('Creating payment for amount:', price);
+        const { data: payment, error: paymentError } = await supabase
           .from('payments')
           .insert({
             participant_id: (participant as any).id,
@@ -109,34 +154,31 @@ export const useRegistration = (): UseRegistrationResult => {
             event_id: eventId,
             amount: price,
             status: 'pending',
-          });
+          })
+          .select()
+          .single();
 
-        if (paymentError) throw paymentError;
-      }
-
-      // 6. Update current_seats if confirmed
-      if (hasSeats) {
-        const { error: updateError } = await supabase
-          .from('events')
-          .update({ current_seats: currentSeats + 1 })
-          .eq('id', eventId);
-
-        if (updateError) throw updateError;
+        if (paymentError) {
+          console.error('Payment creation error:', paymentError);
+          // Don't throw - registration succeeded
+        } else {
+          console.log('Payment created:', payment);
+        }
       }
 
       toast({
-        title: hasSeats ? 'Записано!' : 'В очереди',
+        title: hasSeats ? '✅ Записано!' : '⏳ В очереди',
         description: hasSeats 
           ? 'Вы успешно записаны на событие' 
           : `Вы ${queuePosition}-й в очереди`,
       });
 
       return true;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Registration error:', err);
       toast({
         title: 'Ошибка',
-        description: 'Не удалось записаться',
+        description: err?.message || 'Не удалось записаться',
         variant: 'destructive',
       });
       return false;
