@@ -60,6 +60,7 @@ const EventDetail = ({
   const [queuePosition, setQueuePosition] = useState<number>(1);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | null>(null);
   const [participantId, setParticipantId] = useState<string | null>(null);
+  const [checkingPayment, setCheckingPayment] = useState(false);
   
   const availableSeats = event.maxSeats - event.currentSeats;
   const isFull = availableSeats === 0;
@@ -117,23 +118,38 @@ const EventDetail = ({
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     
-    if (urlParams.get('payment') === 'success' && isOpen && user && participantId) {
-      checkPaymentStatusFromYookassa();
+    if (urlParams.get('payment') === 'success' && isOpen && user) {
+      // Wait for webhook to process, then reload status
+      setTimeout(async () => {
+        await reloadStatus();
+        // Also do a manual check if still pending
+        if (paymentStatus !== 'paid') {
+          await checkPaymentStatusFromYookassa();
+        }
+      }, 2000);
       // Remove payment param from URL
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, [isOpen, participantId]);
+  }, [isOpen, user]);
 
-  const checkPaymentStatusFromYookassa = async () => {
-    if (!participantId) return;
+  const checkPaymentStatusFromYookassa = async (partId?: string) => {
+    const pId = partId || participantId;
+    if (!pId) return;
 
     try {
       // Get payment with external_payment_id
       const { data: payment } = await supabase
         .from('payments')
         .select('id, status, external_payment_id')
-        .eq('participant_id', participantId)
+        .eq('participant_id', pId)
         .maybeSingle();
+
+      console.log('Fetched payment:', payment);
+
+      if (payment?.status === 'paid') {
+        setPaymentStatus('paid');
+        return;
+      }
 
       if (payment?.external_payment_id && payment.status === 'pending') {
         console.log('Checking payment status in YooKassa:', payment.external_payment_id);
@@ -158,11 +174,38 @@ const EventDetail = ({
           setPaymentStatus('pending');
           toast({ title: 'Платёж отменён', variant: 'destructive' });
         }
-      } else if (payment?.status === 'paid') {
-        setPaymentStatus('paid');
       }
     } catch (error) {
       console.error('Error checking payment status:', error);
+    }
+  };
+
+  // Manual payment check function
+  const checkPaymentManually = async () => {
+    if (!user || !event) return;
+    
+    setCheckingPayment(true);
+    
+    try {
+      const { data: reg } = await supabase
+        .from('event_participants')
+        .select('id')
+        .eq('event_id', event.id)
+        .eq('user_id', user.id)
+        .neq('status', 'canceled')
+        .maybeSingle();
+      
+      if (!reg) return;
+      
+      await checkPaymentStatusFromYookassa(reg.id);
+      
+      // Reload status after check
+      await reloadStatus();
+    } catch (error) {
+      console.error('Check payment error:', error);
+      toast({ title: 'Ошибка проверки', variant: 'destructive' });
+    } finally {
+      setCheckingPayment(false);
     }
   };
 
@@ -406,17 +449,33 @@ const EventDetail = ({
                       </div>
                     </div>
 
-                    {/* Payment button - show if price > 0 and not paid yet */}
-                    {needsPayment && (
-                      <GlassButton variant="primary" fullWidth size="lg" onClick={handlePayClick} loading={paymentLoading}>
-                        💳 Оплатить • {event.price.toLocaleString('ru-RU')} ₽
-                      </GlassButton>
-                    )}
-
                     {/* Payment completed status */}
-                    {paymentStatus === 'paid' && (
-                      <div className="bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-green-500/30 rounded-xl p-3 text-center">
-                        <span className="text-green-400 font-semibold">✓ Оплачено</span>
+                    {paymentStatus === 'paid' ? (
+                      <div className="bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border border-emerald-500/30 rounded-xl p-4 text-center">
+                        <div className="text-3xl mb-2">✅</div>
+                        <p className="text-emerald-400 font-semibold text-lg">Оплачено</p>
+                        <p className="text-muted-foreground text-sm mt-1">Участие подтверждено</p>
+                      </div>
+                    ) : event.price > 0 ? (
+                      <>
+                        {/* Payment button */}
+                        <GlassButton variant="primary" fullWidth size="lg" onClick={handlePayClick} loading={paymentLoading}>
+                          💳 Оплатить • {event.price.toLocaleString('ru-RU')} ₽
+                        </GlassButton>
+                        
+                        {/* Manual check link */}
+                        <button 
+                          onClick={checkPaymentManually}
+                          className="text-xs text-muted-foreground underline w-full text-center py-1"
+                          disabled={checkingPayment}
+                        >
+                          {checkingPayment ? 'Проверяем...' : 'Уже оплатили? Проверить статус'}
+                        </button>
+                      </>
+                    ) : (
+                      /* Free event - show confirmed */
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
+                        <p className="text-emerald-400 font-medium">✅ Участие подтверждено</p>
                       </div>
                     )}
 
