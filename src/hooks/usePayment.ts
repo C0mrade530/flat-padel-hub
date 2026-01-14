@@ -45,11 +45,12 @@ export const usePayment = () => {
       console.log('Payment response:', data);
 
       if (data?.confirmation?.confirmation_url) {
-        // Update payment status in database
+        // Update payment with external_id in database
         await supabase
           .from('payments')
           .update({
-            external_id: data.id,
+            external_payment_id: data.id,
+            payment_url: data.confirmation.confirmation_url,
             status: 'pending',
           })
           .eq('participant_id', participantId);
