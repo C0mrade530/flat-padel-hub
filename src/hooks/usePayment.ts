@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, cloudClient } from '@/lib/supabase';
 import { openLink, haptic } from '@/lib/telegram';
 import { toast } from '@/hooks/use-toast';
 
@@ -15,32 +15,52 @@ export const usePayment = () => {
   const createPayment = async (
     eventId: string,
     participantId: string,
+    userId: string,
     amount: number,
-    description: string
+    description: string,
+    returnUrl: string
   ): Promise<PaymentResult> => {
     setLoading(true);
 
     try {
-      // Note: This would connect to a ЮKassa Edge Function
-      // For now, we'll simulate the payment URL generation
-      // In production, you'd have an edge function that creates the payment
-      
-      // Mock payment URL for demo purposes
-      const paymentUrl = `https://yookassa.ru/checkout?amount=${amount}&description=${encodeURIComponent(description)}`;
-      
-      // Update payment status to pending if not already
-      await supabase
-        .from('payments')
-        .update({
-          status: 'pending',
-          // external_id would come from ЮKassa response
-        })
-        .eq('participant_id', participantId);
+      // Use cloudClient for edge functions (deployed on Lovable Cloud)
+      const { data, error } = await cloudClient.functions.invoke('create-payment', {
+        body: {
+          amount,
+          description,
+          metadata: {
+            event_id: eventId,
+            participant_id: participantId,
+            user_id: userId,
+          },
+          return_url: returnUrl,
+        },
+      });
 
-      return {
-        success: true,
-        paymentUrl,
-      };
+      if (error) {
+        console.error('Edge function error:', error);
+        throw error;
+      }
+
+      console.log('Payment response:', data);
+
+      if (data?.confirmation?.confirmation_url) {
+        // Update payment status in database
+        await supabase
+          .from('payments')
+          .update({
+            external_id: data.id,
+            status: 'pending',
+          })
+          .eq('participant_id', participantId);
+
+        return {
+          success: true,
+          paymentUrl: data.confirmation.confirmation_url,
+        };
+      }
+
+      return { success: false, error: data?.error || 'Не удалось создать платёж' };
     } catch (error) {
       console.error('Payment error:', error);
       return { success: false, error: 'Не удалось создать платёж' };
@@ -52,14 +72,19 @@ export const usePayment = () => {
   const handlePayment = async (
     eventId: string,
     participantId: string,
+    userId: string,
     amount: number,
     eventTitle: string
   ) => {
+    const returnUrl = window.location.href;
+    
     const result = await createPayment(
       eventId,
       participantId,
+      userId,
       amount,
-      `Оплата: ${eventTitle}`
+      `Оплата: ${eventTitle}`,
+      returnUrl
     );
 
     if (result.success && result.paymentUrl) {
@@ -75,12 +100,12 @@ export const usePayment = () => {
     }
   };
 
-  const checkPendingPayment = async (eventId: string, userId: string) => {
+  const checkPendingPayment = async (eventId: string, participantId: string) => {
     const { data } = await supabase
       .from('payments')
       .select('*')
       .eq('event_id', eventId)
-      .eq('user_id', userId)
+      .eq('participant_id', participantId)
       .eq('status', 'pending')
       .maybeSingle();
 

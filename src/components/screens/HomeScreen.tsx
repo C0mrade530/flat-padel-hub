@@ -38,7 +38,9 @@ const HomeScreen = () => {
       if (selectedEvent && user) {
         const status = await checkRegistration(selectedEvent.id);
         setIsRegistered(!!status);
-        setRegistrationStatus(status);
+        if (status) {
+          setRegistrationStatus(status);
+        }
       }
     };
     checkStatus();
