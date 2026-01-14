@@ -61,6 +61,7 @@ const EventDetail = ({
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | null>(null);
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [checkingPayment, setCheckingPayment] = useState(false);
+  const [acceptedOffer, setAcceptedOffer] = useState(false);
   
   const availableSeats = event.maxSeats - event.currentSeats;
   const isFull = availableSeats === 0;
@@ -119,18 +120,20 @@ const EventDetail = ({
     const urlParams = new URLSearchParams(window.location.search);
     
     if (urlParams.get('payment') === 'success' && isOpen && user) {
-      // Wait for webhook to process, then reload status
-      setTimeout(async () => {
-        await reloadStatus();
-        // Also do a manual check if still pending
-        if (paymentStatus !== 'paid') {
-          await checkPaymentStatusFromYookassa();
-        }
-      }, 2000);
-      // Remove payment param from URL
+      console.log('Returned from payment, checking status...');
+      
+      // Remove payment param from URL immediately
       window.history.replaceState({}, '', window.location.pathname);
+      
+      // Show checking toast
+      toast({ title: '⏳ Проверяем оплату...' });
+      
+      // Wait for webhook to process, then check
+      setTimeout(() => {
+        checkPaymentManually();
+      }, 2000);
     }
-  }, [isOpen, user]);
+  }, [isOpen, user, event]);
 
   const checkPaymentStatusFromYookassa = async (partId?: string) => {
     const pId = partId || participantId;
@@ -182,12 +185,17 @@ const EventDetail = ({
 
   // Manual payment check function
   const checkPaymentManually = async () => {
-    if (!user || !event) return;
+    if (!user || !event) {
+      console.log('No user or event');
+      return;
+    }
     
     setCheckingPayment(true);
+    console.log('Checking payment status...');
     
     try {
-      const { data: reg } = await supabase
+      // 1. Find user's registration
+      const { data: reg, error: regError } = await supabase
         .from('event_participants')
         .select('id')
         .eq('event_id', event.id)
@@ -195,15 +203,75 @@ const EventDetail = ({
         .neq('status', 'canceled')
         .maybeSingle();
       
-      if (!reg) return;
+      console.log('Registration:', reg, regError);
       
-      await checkPaymentStatusFromYookassa(reg.id);
+      if (!reg) {
+        toast({ title: 'Запись не найдена', variant: 'destructive' });
+        return;
+      }
       
-      // Reload status after check
-      await reloadStatus();
-    } catch (error) {
+      // 2. Get payment
+      const { data: payment, error: payError } = await supabase
+        .from('payments')
+        .select('id, status, external_payment_id')
+        .eq('participant_id', reg.id)
+        .maybeSingle();
+      
+      console.log('Payment:', payment, payError);
+      
+      // 3. If already paid in DB
+      if (payment?.status === 'paid') {
+        console.log('Already paid in DB');
+        setPaymentStatus('paid');
+        toast({ title: '✅ Оплата подтверждена!' });
+        return;
+      }
+      
+      // 4. If has external_payment_id - check in YooKassa
+      if (payment?.external_payment_id) {
+        console.log('Checking in YooKassa:', payment.external_payment_id);
+        
+        const { data: checkResult, error: checkError } = await supabase.functions.invoke('check-payment', {
+          body: { payment_id: payment.external_payment_id }
+        });
+        
+        console.log('YooKassa check result:', checkResult, checkError);
+        
+        if (checkResult?.status === 'succeeded' || checkResult?.paid === true) {
+          // Update status in DB
+          const { error: updateError } = await supabase
+            .from('payments')
+            .update({ 
+              status: 'paid', 
+              paid_at: new Date().toISOString() 
+            })
+            .eq('id', payment.id);
+          
+          console.log('Update result:', updateError);
+          
+          if (!updateError) {
+            setPaymentStatus('paid');
+            toast({ title: '✅ Оплата подтверждена!' });
+          }
+        } else {
+          toast({ 
+            title: 'Оплата ещё не получена', 
+            description: 'Статус: ' + (checkResult?.status || 'неизвестно'),
+          });
+        }
+      } else {
+        toast({ 
+          title: 'Платёж не создан', 
+          description: 'Нажмите "Оплатить" для создания платежа' 
+        });
+      }
+    } catch (error: any) {
       console.error('Check payment error:', error);
-      toast({ title: 'Ошибка проверки', variant: 'destructive' });
+      toast({ 
+        title: 'Ошибка проверки', 
+        description: error.message,
+        variant: 'destructive' 
+      });
     } finally {
       setCheckingPayment(false);
     }
@@ -457,9 +525,38 @@ const EventDetail = ({
                         <p className="text-muted-foreground text-sm mt-1">Участие подтверждено</p>
                       </div>
                     ) : event.price > 0 ? (
-                      <>
-                        {/* Payment button */}
-                        <GlassButton variant="primary" fullWidth size="lg" onClick={handlePayClick} loading={paymentLoading}>
+                      <div className="space-y-3">
+                        {/* Offer checkbox */}
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={acceptedOffer}
+                            onChange={(e) => setAcceptedOffer(e.target.checked)}
+                            className="mt-1 w-4 h-4 rounded border-white/20 bg-white/5 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 accent-emerald-500"
+                          />
+                          <span className="text-sm text-muted-foreground">
+                            Принимаю условия{' '}
+                            <a 
+                              href="/offer" 
+                              target="_blank" 
+                              className="text-emerald-400 underline hover:text-emerald-300"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              публичной оферты
+                            </a>
+                          </span>
+                        </label>
+
+                        {/* Payment button - disabled if offer not accepted */}
+                        <GlassButton 
+                          variant="primary" 
+                          fullWidth 
+                          size="lg" 
+                          onClick={handlePayClick} 
+                          loading={paymentLoading}
+                          disabled={!acceptedOffer}
+                          className={!acceptedOffer ? 'opacity-50 cursor-not-allowed' : ''}
+                        >
                           💳 Оплатить • {event.price.toLocaleString('ru-RU')} ₽
                         </GlassButton>
                         
@@ -471,7 +568,7 @@ const EventDetail = ({
                         >
                           {checkingPayment ? 'Проверяем...' : 'Уже оплатили? Проверить статус'}
                         </button>
-                      </>
+                      </div>
                     ) : (
                       /* Free event - show confirmed */
                       <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
