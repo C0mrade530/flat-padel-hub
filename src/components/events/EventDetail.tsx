@@ -58,7 +58,7 @@ const EventDetail = ({
   
   const [registrationStatus, setRegistrationStatus] = useState<'confirmed' | 'waiting' | null>(null);
   const [queuePosition, setQueuePosition] = useState<number>(1);
-  const [pendingPayment, setPendingPayment] = useState<any>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | null>(null);
   const [participantId, setParticipantId] = useState<string | null>(null);
   
   const availableSeats = event.maxSeats - event.currentSeats;
@@ -68,43 +68,49 @@ const EventDetail = ({
   const isRegistered = registrationStatus === 'confirmed';
   const isWaiting = registrationStatus === 'waiting';
   const isLoading = registering || paymentLoading;
+  const needsPayment = isRegistered && event.price > 0 && paymentStatus !== 'paid';
+
+  // Function to reload registration and payment status
+  const reloadStatus = async () => {
+    if (!user || !event) return;
+
+    // Check registration
+    const { data: reg } = await supabase
+      .from('event_participants')
+      .select('id, status, queue_position')
+      .eq('event_id', event.id)
+      .eq('user_id', user.id)
+      .neq('status', 'canceled')
+      .maybeSingle();
+
+    console.log('Registration status:', reg);
+
+    if (reg) {
+      setRegistrationStatus(reg.status as 'confirmed' | 'waiting');
+      setQueuePosition(reg.queue_position || 1);
+      setParticipantId(reg.id);
+
+      // Check payment status
+      const { data: payment } = await supabase
+        .from('payments')
+        .select('id, status')
+        .eq('participant_id', reg.id)
+        .maybeSingle();
+
+      console.log('Payment status:', payment);
+      setPaymentStatus(payment?.status as 'pending' | 'paid' | null);
+    } else {
+      setRegistrationStatus(null);
+      setParticipantId(null);
+      setPaymentStatus(null);
+    }
+  };
 
   // Check registration status when event is opened
   useEffect(() => {
-    const checkStatus = async () => {
-      if (!user || !event || !isOpen) return;
-
-      // Check registration
-      const { data: reg } = await supabase
-        .from('event_participants')
-        .select('id, status, queue_position')
-        .eq('event_id', event.id)
-        .eq('user_id', user.id)
-        .neq('status', 'canceled')
-        .maybeSingle();
-
-      if (reg) {
-        setRegistrationStatus(reg.status as 'confirmed' | 'waiting');
-        setQueuePosition(reg.queue_position || 1);
-        setParticipantId(reg.id);
-
-        // Check pending payment
-        const { data: payment } = await supabase
-          .from('payments')
-          .select('*')
-          .eq('participant_id', reg.id)
-          .eq('status', 'pending')
-          .maybeSingle();
-
-        setPendingPayment(payment);
-      } else {
-        setRegistrationStatus(null);
-        setParticipantId(null);
-        setPendingPayment(null);
-      }
-    };
-
-    checkStatus();
+    if (isOpen) {
+      reloadStatus();
+    }
   }, [event, user, isOpen]);
 
   const formatDate = (dateStr: string) => {
@@ -129,15 +135,14 @@ const EventDetail = ({
     const success = await register(event.id, event.price);
     
     if (success) {
-      // Reload status
-      const status = await checkRegistration(event.id);
-      setRegistrationStatus(status);
+      // Reload full status including payment
+      await reloadStatus();
 
       toast({
-        title: status === 'confirmed' ? 'Записано!' : 'В очереди',
-        description: status === 'confirmed'
-          ? 'Вы успешно записаны на событие'
-          : 'Вы добавлены в очередь',
+        title: registrationStatus === 'waiting' ? '⏳ В очереди' : '✅ Записано!',
+        description: registrationStatus === 'waiting'
+          ? 'Вы добавлены в очередь'
+          : 'Вы успешно записаны на событие',
       });
 
       haptic.notification("success");
@@ -154,7 +159,7 @@ const EventDetail = ({
     if (success) {
       setRegistrationStatus(null);
       setParticipantId(null);
-      setPendingPayment(null);
+      setPaymentStatus(null);
       onEventsRefetch?.();
     }
   };
@@ -348,10 +353,18 @@ const EventDetail = ({
                       </div>
                     </div>
 
-                    {pendingPayment && (
+                    {/* Payment button - show if price > 0 and not paid yet */}
+                    {needsPayment && (
                       <GlassButton variant="primary" fullWidth size="lg" onClick={handlePayClick} loading={paymentLoading}>
                         💳 Оплатить • {event.price.toLocaleString('ru-RU')} ₽
                       </GlassButton>
+                    )}
+
+                    {/* Payment completed status */}
+                    {paymentStatus === 'paid' && (
+                      <div className="bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-green-500/30 rounded-xl p-3 text-center">
+                        <span className="text-green-400 font-semibold">✓ Оплачено</span>
+                      </div>
                     )}
 
                     <GlassButton variant="ghost" fullWidth onClick={handleCancel} loading={isLoading}>
