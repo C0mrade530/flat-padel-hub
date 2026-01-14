@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Loader2 } from "lucide-react";
+import { Search, RefreshCw } from "lucide-react";
 import { GlassInput } from "@/components/ui/GlassInput";
 import { GlassPill } from "@/components/ui/GlassPill";
 import { EventCard } from "@/components/events/EventCard";
 import { EventDetail } from "@/components/events/EventDetail";
+import { EventCardSkeleton } from "@/components/ui/skeleton";
 import { useEvents, TransformedEvent } from "@/hooks/useEvents";
 import { useRegistration } from "@/hooks/useRegistration";
 import { useUser } from "@/contexts/UserContext";
+import { haptic } from "@/lib/telegram";
 
 const filters = [
   { id: "all", label: "Все" },
@@ -19,25 +21,28 @@ const filters = [
 const HomeScreen = () => {
   const { user } = useUser();
   const { events, loading, error, refetch } = useEvents();
-  const { register, checkRegistration, loading: registering } = useRegistration();
+  const { register, cancel, checkRegistration, loading: registering } = useRegistration();
   
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [selectedEvent, setSelectedEvent] = useState<TransformedEvent | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
+  const [registrationStatus, setRegistrationStatus] = useState<'confirmed' | 'waiting' | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const userName = user?.display_name?.split(' ')[0] || 'Игрок';
 
   // Check registration status when event is selected
   useEffect(() => {
     const checkStatus = async () => {
-      if (selectedEvent) {
-        const registered = await checkRegistration(selectedEvent.id);
-        setIsRegistered(registered);
+      if (selectedEvent && user) {
+        const status = await checkRegistration(selectedEvent.id);
+        setIsRegistered(!!status);
+        setRegistrationStatus(status);
       }
     };
     checkStatus();
-  }, [selectedEvent, checkRegistration]);
+  }, [selectedEvent, user, checkRegistration]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -46,13 +51,18 @@ const HomeScreen = () => {
     return "Добрый вечер";
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    haptic.impact("light");
+    await refetch();
+    setRefreshing(false);
+  };
+
   const filteredEvents = events.filter((event) => {
-    // Filter by level
     if (activeFilter !== "all") {
       const levelLower = event.level.toLowerCase();
       if (!levelLower.includes(activeFilter)) return false;
     }
-    // Filter by search
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       return (
@@ -80,36 +90,58 @@ const HomeScreen = () => {
   const handleRegister = async () => {
     if (!selectedEvent) return;
     
+    haptic.impact("medium");
     const success = await register(selectedEvent.id, selectedEvent.price);
     if (success) {
       setIsRegistered(true);
+      haptic.notification("success");
       refetch();
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
-    );
-  }
+  const handleCancel = async () => {
+    if (!selectedEvent) return;
+    
+    haptic.impact("medium");
+    const success = await cancel(selectedEvent.id);
+    if (success) {
+      setIsRegistered(false);
+      setRegistrationStatus(null);
+      refetch();
+    }
+  };
+
+  const handleEventClick = (event: TransformedEvent) => {
+    haptic.impact("light");
+    setSelectedEvent(event);
+  };
 
   return (
     <div className="min-h-screen pb-24 px-4 pt-safe-top">
       {/* Header */}
       <motion.header
-        className="pt-8 mb-6"
+        className="pt-8 mb-6 flex items-start justify-between"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <p className="text-foreground-secondary text-sm mb-1">
-          {getGreeting()}, {userName} 👋
-        </p>
-        <h1 className="text-2xl font-semibold text-foreground text-tight">
-          Найди свою игру
-        </h1>
+        <div>
+          <p className="text-foreground-secondary text-sm mb-1">
+            {getGreeting()}, {userName} 👋
+          </p>
+          <h1 className="text-2xl font-semibold text-foreground text-tight">
+            Найди свою игру
+          </h1>
+        </div>
+        <motion.button
+          onClick={handleRefresh}
+          className="p-2 rounded-xl glass border border-primary/10"
+          whileTap={{ scale: 0.95 }}
+          animate={{ rotate: refreshing ? 360 : 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <RefreshCw className={`w-5 h-5 text-primary ${refreshing ? 'animate-spin' : ''}`} />
+        </motion.button>
       </motion.header>
 
       {/* Search */}
@@ -138,7 +170,10 @@ const HomeScreen = () => {
           <GlassPill
             key={filter.id}
             active={activeFilter === filter.id}
-            onClick={() => setActiveFilter(filter.id)}
+            onClick={() => {
+              haptic.selection();
+              setActiveFilter(filter.id);
+            }}
           >
             {filter.label}
           </GlassPill>
@@ -155,8 +190,17 @@ const HomeScreen = () => {
         </div>
       )}
 
+      {/* Loading skeletons */}
+      {loading && (
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <EventCardSkeleton key={i} />
+          ))}
+        </div>
+      )}
+
       {/* Empty state */}
-      {!error && filteredEvents.length === 0 && (
+      {!loading && !error && filteredEvents.length === 0 && (
         <div className="text-center py-12">
           <span className="text-5xl mb-4 block">🎾</span>
           <p className="text-foreground-secondary">Нет доступных событий</p>
@@ -164,9 +208,8 @@ const HomeScreen = () => {
       )}
 
       {/* Events */}
-      {Object.entries(groupedEvents).map(([group, groupEvents], groupIndex) => (
+      {!loading && Object.entries(groupedEvents).map(([group, groupEvents], groupIndex) => (
         <div key={group} className="mb-6">
-          {/* Date separator */}
           <motion.div
             className="flex items-center gap-4 mb-4"
             initial={{ opacity: 0 }}
@@ -180,14 +223,13 @@ const HomeScreen = () => {
             <div className="flex-1 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
           </motion.div>
 
-          {/* Event cards */}
           <div className="space-y-4">
             {groupEvents.map((event, index) => (
               <EventCard
                 key={event.id}
                 event={event}
                 index={index}
-                onClick={() => setSelectedEvent(event)}
+                onClick={() => handleEventClick(event)}
               />
             ))}
           </div>
@@ -202,9 +244,12 @@ const HomeScreen = () => {
           onClose={() => {
             setSelectedEvent(null);
             setIsRegistered(false);
+            setRegistrationStatus(null);
           }}
           onRegister={handleRegister}
+          onCancel={handleCancel}
           isRegistered={isRegistered}
+          registrationStatus={registrationStatus}
           isLoading={registering}
         />
       )}
