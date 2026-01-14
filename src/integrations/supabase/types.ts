@@ -14,16 +14,264 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      event_participants: {
+        Row: {
+          canceled_at: string | null
+          event_id: string
+          id: string
+          queue_position: number | null
+          registered_at: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          canceled_at?: string | null
+          event_id: string
+          id?: string
+          queue_position?: number | null
+          registered_at?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          canceled_at?: string | null
+          event_id?: string
+          id?: string
+          queue_position?: number | null
+          registered_at?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_participants_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          city: string | null
+          created_at: string
+          created_by: string | null
+          current_seats: number
+          description: string | null
+          duration_minutes: number | null
+          emoji: string | null
+          event_date: string
+          id: string
+          level: string | null
+          location: string | null
+          max_seats: number
+          price: number | null
+          status: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_seats?: number
+          description?: string | null
+          duration_minutes?: number | null
+          emoji?: string | null
+          event_date: string
+          id?: string
+          level?: string | null
+          location?: string | null
+          max_seats?: number
+          price?: number | null
+          status?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_seats?: number
+          description?: string | null
+          duration_minutes?: number | null
+          emoji?: string | null
+          event_date?: string
+          id?: string
+          level?: string | null
+          location?: string | null
+          max_seats?: number
+          price?: number | null
+          status?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          event_id: string
+          external_payment_id: string | null
+          id: string
+          paid_at: string | null
+          participant_id: string
+          payment_provider: string | null
+          payment_url: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          event_id: string
+          external_payment_id?: string | null
+          id?: string
+          paid_at?: string | null
+          participant_id: string
+          payment_provider?: string | null
+          payment_url?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          event_id?: string
+          external_payment_id?: string | null
+          id?: string
+          paid_at?: string | null
+          participant_id?: string
+          payment_provider?: string | null
+          payment_url?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "event_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string
+          id: string
+          level: string | null
+          membership_status: string | null
+          role: Database["public"]["Enums"]["app_role"] | null
+          telegram_id: number
+          updated_at: string
+          username: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          level?: string | null
+          membership_status?: string | null
+          role?: Database["public"]["Enums"]["app_role"] | null
+          telegram_id: number
+          updated_at?: string
+          username?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          level?: string | null
+          membership_status?: string | null
+          role?: Database["public"]["Enums"]["app_role"] | null
+          telegram_id?: number
+          updated_at?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "owner" | "assistant" | "player"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +398,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["owner", "assistant", "player"],
+    },
   },
 } as const

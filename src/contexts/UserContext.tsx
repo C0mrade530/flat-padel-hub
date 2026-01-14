@@ -2,17 +2,8 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { supabase } from '@/lib/supabase';
 import type { DbUser } from '@/types/database';
 
-// Dev mode test user (owner role for testing)
-const DEV_USER: DbUser = {
-  id: 'dev-user-001',
-  telegram_id: 123456789,
-  display_name: 'Dev User',
-  username: 'devuser',
-  avatar_url: null,
-  level: 'C+',
-  role: 'owner',
-  membership_status: 'paid',
-};
+// Dev mode telegram_id for test user
+const DEV_TELEGRAM_ID = 123456789;
 
 interface UserContextType {
   user: DbUser | null;
@@ -40,6 +31,54 @@ export const UserProvider = ({ children }: UserProviderProps) => {
   const [user, setUser] = useState<DbUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDevMode, setIsDevMode] = useState(false);
+
+  // Initialize or fetch dev user from database
+  const initDevUser = async (): Promise<DbUser | null> => {
+    try {
+      // First try to find existing dev user
+      const { data: existing, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('telegram_id', DEV_TELEGRAM_ID)
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error('Error fetching dev user:', fetchError);
+        return null;
+      }
+
+      if (existing) {
+        console.log('DEV MODE: Found existing dev user:', existing.id);
+        return existing as DbUser;
+      }
+
+      // Create new dev user if not exists
+      console.log('DEV MODE: Creating new dev user...');
+      const { data: created, error: createError } = await supabase
+        .from('users')
+        .insert({
+          telegram_id: DEV_TELEGRAM_ID,
+          display_name: 'Dev User',
+          username: 'devuser',
+          level: 'D+',
+          role: 'owner',
+          membership_status: 'paid',
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating dev user:', createError);
+        return null;
+      }
+
+      console.log('DEV MODE: Created dev user:', created.id);
+      return created as DbUser;
+    } catch (error) {
+      console.error('Dev user init error:', error);
+      return null;
+    }
+  };
 
   const fetchUser = async () => {
     // Check if Telegram WebApp is available
@@ -85,13 +124,15 @@ export const UserProvider = ({ children }: UserProviderProps) => {
       } catch (error) {
         console.error('Error fetching user:', error);
         // Fallback to dev mode on error
-        setUser(DEV_USER);
+        const devUser = await initDevUser();
+        setUser(devUser);
         setIsDevMode(true);
       }
     } else {
-      // Dev mode - no Telegram, use test user
-      console.log('DEV MODE: Using test user with owner role');
-      setUser(DEV_USER);
+      // Dev mode - no Telegram, create/fetch real user from DB
+      console.log('DEV MODE: No Telegram WebApp, initializing dev user...');
+      const devUser = await initDevUser();
+      setUser(devUser);
       setIsDevMode(true);
     }
     
