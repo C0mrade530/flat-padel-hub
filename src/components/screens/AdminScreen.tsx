@@ -1,42 +1,72 @@
 import { motion } from "framer-motion";
+import { Loader2 } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { GlassButton } from "@/components/ui/GlassButton";
-import { Settings, Plus, CreditCard, ClipboardList, Users, ChevronRight, TrendingUp } from "lucide-react";
-
-// Mock stats
-const mockStats = {
-  playersToday: 12,
-  revenue: 45000,
-  pendingPayments: 3,
-};
-
-const menuItems = [
-  {
-    id: "payments",
-    icon: CreditCard,
-    label: "Ожидают оплаты",
-    badge: mockStats.pendingPayments,
-    badgeType: "error" as const,
-  },
-  {
-    id: "events",
-    icon: ClipboardList,
-    label: "Все события",
-    badge: undefined,
-    badgeType: undefined,
-  },
-  {
-    id: "users",
-    icon: Users,
-    label: "Пользователи",
-    badge: undefined,
-    badgeType: undefined,
-  },
-];
+import { Settings, Plus, CreditCard, ClipboardList, Users, ChevronRight, TrendingUp, AlertCircle } from "lucide-react";
+import { useAdminStats } from "@/hooks/useAdminStats";
+import { useUser } from "@/contexts/UserContext";
 
 const AdminScreen = () => {
+  const { isAdmin, isDevMode } = useUser();
+  const { stats, loading, error, refetch } = useAdminStats();
+
+  const menuItems = [
+    {
+      id: "payments",
+      icon: CreditCard,
+      label: "Ожидают оплаты",
+      badge: stats.pendingPayments,
+      badgeType: "error" as const,
+    },
+    {
+      id: "events",
+      icon: ClipboardList,
+      label: "Все события",
+      badge: undefined,
+      badgeType: undefined,
+    },
+    {
+      id: "users",
+      icon: Users,
+      label: "Пользователи",
+      badge: undefined,
+      badgeType: undefined,
+    },
+  ];
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-foreground mb-2">Доступ запрещён</h2>
+          <p className="text-foreground-secondary">У вас нет прав для просмотра этой страницы</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen pb-24 px-4 pt-safe-top">
+      {/* Dev mode indicator */}
+      {isDevMode && (
+        <motion.div
+          className="mt-4 p-2 rounded-lg bg-warning/10 border border-warning/20 text-center"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <span className="text-xs text-warning">⚠️ DEV MODE: Тестовый администратор</span>
+        </motion.div>
+      )}
+
       {/* Header */}
       <motion.header
         className="pt-8 mb-6"
@@ -52,6 +82,16 @@ const AdminScreen = () => {
         </div>
       </motion.header>
 
+      {/* Error state */}
+      {error && (
+        <div className="text-center py-6 mb-6">
+          <p className="text-destructive mb-4">{error}</p>
+          <button onClick={refetch} className="text-primary underline">
+            Попробовать снова
+          </button>
+        </div>
+      )}
+
       {/* Stats Grid */}
       <motion.div
         className="grid grid-cols-2 gap-3 mb-6"
@@ -65,7 +105,7 @@ const AdminScreen = () => {
             <TrendingUp className="w-3 h-3 text-success" />
           </div>
           <div className="text-3xl font-bold text-foreground mb-1">
-            {mockStats.playersToday}
+            {stats.playersToday}
           </div>
           <div className="text-xs text-foreground-tertiary uppercase tracking-wide">
             Игроков сегодня
@@ -78,7 +118,7 @@ const AdminScreen = () => {
             <TrendingUp className="w-3 h-3 text-success" />
           </div>
           <div className="text-3xl font-bold text-foreground mb-1">
-            {mockStats.revenue.toLocaleString("ru-RU")}
+            {stats.revenue.toLocaleString("ru-RU")}
             <span className="text-lg text-foreground-secondary ml-1">₽</span>
           </div>
           <div className="text-xs text-foreground-tertiary uppercase tracking-wide">

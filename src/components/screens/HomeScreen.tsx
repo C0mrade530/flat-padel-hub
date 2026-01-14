@@ -1,94 +1,43 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
 import { GlassInput } from "@/components/ui/GlassInput";
 import { GlassPill } from "@/components/ui/GlassPill";
 import { EventCard } from "@/components/events/EventCard";
 import { EventDetail } from "@/components/events/EventDetail";
-
-// Mock data
-const mockEvents = [
-  {
-    id: "1",
-    type: "training" as const,
-    title: "Тренировка",
-    level: "D+",
-    date: "2026-01-15",
-    startTime: "18:00",
-    endTime: "20:00",
-    location: "Padel Arena Moscow",
-    maxSeats: 8,
-    currentSeats: 6,
-    price: 2500,
-    description: "Тренировка для начинающих игроков. Отработка базовых ударов и тактики игры. Подходит для тех, кто недавно начал играть в падел.",
-    participants: [
-      { id: "1", name: "Леонид Т." },
-      { id: "2", name: "Анна К." },
-      { id: "3", name: "Михаил Р." },
-      { id: "4", name: "Елена С." },
-      { id: "5", name: "Дмитрий В." },
-      { id: "6", name: "Ольга Н." },
-    ],
-  },
-  {
-    id: "2",
-    type: "tournament" as const,
-    title: "Турнир",
-    level: "C+",
-    date: "2026-01-16",
-    startTime: "10:00",
-    endTime: "18:00",
-    location: "Padel Club Premium",
-    maxSeats: 16,
-    currentSeats: 14,
-    price: 5000,
-    description: "Еженедельный турнир для игроков среднего уровня. Формат: американка. Призы для топ-3.",
-  },
-  {
-    id: "3",
-    type: "stretching" as const,
-    title: "Растяжка",
-    level: "Все",
-    date: "2026-01-15",
-    startTime: "20:30",
-    endTime: "21:30",
-    location: "Padel Arena Moscow",
-    maxSeats: 12,
-    currentSeats: 4,
-    price: 1500,
-    description: "Восстановительная растяжка после игры. Подходит для всех уровней подготовки.",
-  },
-  {
-    id: "4",
-    type: "training" as const,
-    title: "Тренировка",
-    level: "C/C+",
-    date: "2026-01-17",
-    startTime: "19:00",
-    endTime: "21:00",
-    location: "World Class Padel",
-    maxSeats: 8,
-    currentSeats: 8,
-    price: 3000,
-    description: "Продвинутая тренировка с акцентом на тактику парной игры.",
-  },
-];
+import { useEvents, TransformedEvent } from "@/hooks/useEvents";
+import { useRegistration } from "@/hooks/useRegistration";
+import { useUser } from "@/contexts/UserContext";
 
 const filters = [
   { id: "all", label: "Все" },
-  { id: "dd+", label: "D/D+" },
-  { id: "cc+", label: "C/C+" },
-  { id: "bb+", label: "B/B+" },
+  { id: "d", label: "D/D+" },
+  { id: "c", label: "C/C+" },
+  { id: "b", label: "B/B+" },
 ];
 
-interface HomeScreenProps {
-  userName?: string;
-}
-
-const HomeScreen = ({ userName = "Леонид" }: HomeScreenProps) => {
+const HomeScreen = () => {
+  const { user } = useUser();
+  const { events, loading, error, refetch } = useEvents();
+  const { register, checkRegistration, loading: registering } = useRegistration();
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
-  const [selectedEvent, setSelectedEvent] = useState<typeof mockEvents[0] | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<TransformedEvent | null>(null);
+  const [isRegistered, setIsRegistered] = useState(false);
+
+  const userName = user?.display_name?.split(' ')[0] || 'Игрок';
+
+  // Check registration status when event is selected
+  useEffect(() => {
+    const checkStatus = async () => {
+      if (selectedEvent) {
+        const registered = await checkRegistration(selectedEvent.id);
+        setIsRegistered(registered);
+      }
+    };
+    checkStatus();
+  }, [selectedEvent, checkRegistration]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -97,9 +46,22 @@ const HomeScreen = ({ userName = "Леонид" }: HomeScreenProps) => {
     return "Добрый вечер";
   };
 
-  const filteredEvents = mockEvents.filter((event) => {
-    if (activeFilter === "all") return true;
-    return event.level.toLowerCase().includes(activeFilter.replace("+", ""));
+  const filteredEvents = events.filter((event) => {
+    // Filter by level
+    if (activeFilter !== "all") {
+      const levelLower = event.level.toLowerCase();
+      if (!levelLower.includes(activeFilter)) return false;
+    }
+    // Filter by search
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return (
+        event.title.toLowerCase().includes(query) ||
+        event.location.toLowerCase().includes(query) ||
+        event.level.toLowerCase().includes(query)
+      );
+    }
+    return true;
   });
 
   const groupedEvents = filteredEvents.reduce((acc, event) => {
@@ -113,7 +75,25 @@ const HomeScreen = ({ userName = "Леонид" }: HomeScreenProps) => {
     if (!acc[group]) acc[group] = [];
     acc[group].push(event);
     return acc;
-  }, {} as Record<string, typeof mockEvents>);
+  }, {} as Record<string, TransformedEvent[]>);
+
+  const handleRegister = async () => {
+    if (!selectedEvent) return;
+    
+    const success = await register(selectedEvent.id, selectedEvent.price);
+    if (success) {
+      setIsRegistered(true);
+      refetch();
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-24 px-4 pt-safe-top">
@@ -165,8 +145,26 @@ const HomeScreen = ({ userName = "Леонид" }: HomeScreenProps) => {
         ))}
       </motion.div>
 
+      {/* Error state */}
+      {error && (
+        <div className="text-center py-12">
+          <p className="text-destructive mb-4">{error}</p>
+          <button onClick={refetch} className="text-primary underline">
+            Попробовать снова
+          </button>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!error && filteredEvents.length === 0 && (
+        <div className="text-center py-12">
+          <span className="text-5xl mb-4 block">🎾</span>
+          <p className="text-foreground-secondary">Нет доступных событий</p>
+        </div>
+      )}
+
       {/* Events */}
-      {Object.entries(groupedEvents).map(([group, events], groupIndex) => (
+      {Object.entries(groupedEvents).map(([group, groupEvents], groupIndex) => (
         <div key={group} className="mb-6">
           {/* Date separator */}
           <motion.div
@@ -184,7 +182,7 @@ const HomeScreen = ({ userName = "Леонид" }: HomeScreenProps) => {
 
           {/* Event cards */}
           <div className="space-y-4">
-            {events.map((event, index) => (
+            {groupEvents.map((event, index) => (
               <EventCard
                 key={event.id}
                 event={event}
@@ -197,15 +195,19 @@ const HomeScreen = ({ userName = "Леонид" }: HomeScreenProps) => {
       ))}
 
       {/* Event Detail */}
-      <EventDetail
-        event={selectedEvent || mockEvents[0]}
-        isOpen={!!selectedEvent}
-        onClose={() => setSelectedEvent(null)}
-        onRegister={() => {
-          // Handle registration
-          console.log("Register for event:", selectedEvent?.id);
-        }}
-      />
+      {selectedEvent && (
+        <EventDetail
+          event={selectedEvent}
+          isOpen={!!selectedEvent}
+          onClose={() => {
+            setSelectedEvent(null);
+            setIsRegistered(false);
+          }}
+          onRegister={handleRegister}
+          isRegistered={isRegistered}
+          isLoading={registering}
+        />
+      )}
     </div>
   );
 };

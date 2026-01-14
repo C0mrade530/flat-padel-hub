@@ -1,48 +1,72 @@
 import { motion } from "framer-motion";
+import { Loader2 } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Avatar } from "@/components/ui/GlassAvatar";
-import { Target, Bell, Calendar, HelpCircle, ChevronRight, Star } from "lucide-react";
-
-// Mock user data
-const mockUser = {
-  name: "Леонид Тарелкин",
-  username: "@leonid",
-  avatar: undefined,
-  gamesPlayed: 47,
-  level: "C+",
-  rating: 4.8,
-};
-
-const menuItems = [
-  {
-    id: "level",
-    icon: Target,
-    label: "Уровень игры",
-    value: "C+",
-  },
-  {
-    id: "notifications",
-    icon: Bell,
-    label: "Уведомления",
-    value: "Вкл",
-  },
-  {
-    id: "preferences",
-    icon: Calendar,
-    label: "Предпочтения",
-    value: undefined,
-  },
-  {
-    id: "help",
-    icon: HelpCircle,
-    label: "Помощь",
-    value: undefined,
-  },
-];
+import { Target, Bell, Calendar, HelpCircle, ChevronRight, Star, AlertCircle } from "lucide-react";
+import { useUser } from "@/contexts/UserContext";
 
 const ProfileScreen = () => {
+  const { user, loading, isDevMode } = useUser();
+
+  const menuItems = [
+    {
+      id: "level",
+      icon: Target,
+      label: "Уровень игры",
+      value: user?.level || "—",
+    },
+    {
+      id: "notifications",
+      icon: Bell,
+      label: "Уведомления",
+      value: "Вкл",
+    },
+    {
+      id: "preferences",
+      icon: Calendar,
+      label: "Предпочтения",
+      value: undefined,
+    },
+    {
+      id: "help",
+      icon: HelpCircle,
+      label: "Помощь",
+      value: undefined,
+    },
+  ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <p className="text-foreground-secondary">Не удалось загрузить профиль</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen pb-24 px-4 pt-safe-top">
+      {/* Dev mode indicator */}
+      {isDevMode && (
+        <motion.div
+          className="mt-4 p-2 rounded-lg bg-warning/10 border border-warning/20 text-center"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <span className="text-xs text-warning">⚠️ DEV MODE: Тестовый пользователь</span>
+        </motion.div>
+      )}
+
       {/* Header with Avatar */}
       <motion.div
         className="pt-8 flex flex-col items-center mb-8"
@@ -57,8 +81,8 @@ const ProfileScreen = () => {
           transition={{ type: "spring", stiffness: 400, damping: 20, delay: 0.2 }}
         >
           <Avatar
-            name={mockUser.name}
-            src={mockUser.avatar}
+            name={user.display_name}
+            src={user.avatar_url || undefined}
             size="xl"
             glow
           />
@@ -80,7 +104,7 @@ const ProfileScreen = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          {mockUser.name}
+          {user.display_name}
         </motion.h1>
 
         <motion.p
@@ -89,7 +113,7 @@ const ProfileScreen = () => {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
         >
-          {mockUser.username}
+          @{user.username || 'player'}
         </motion.p>
       </motion.div>
 
@@ -104,7 +128,7 @@ const ProfileScreen = () => {
           <div className="grid grid-cols-3 divide-x divide-primary/10">
             <div className="text-center px-2">
               <div className="text-2xl font-bold text-foreground mb-1">
-                {mockUser.gamesPlayed}
+                —
               </div>
               <div className="text-xs text-foreground-tertiary uppercase tracking-wide">
                 Игр
@@ -112,7 +136,7 @@ const ProfileScreen = () => {
             </div>
             <div className="text-center px-2">
               <div className="text-2xl font-bold gradient-text mb-1">
-                {mockUser.level}
+                {user.level || '—'}
               </div>
               <div className="text-xs text-foreground-tertiary uppercase tracking-wide">
                 Уровень
@@ -121,12 +145,29 @@ const ProfileScreen = () => {
             <div className="text-center px-2">
               <div className="text-2xl font-bold text-foreground mb-1 flex items-center justify-center gap-1">
                 <Star className="w-5 h-5 text-warning fill-warning" />
-                {mockUser.rating}
+                —
               </div>
               <div className="text-xs text-foreground-tertiary uppercase tracking-wide">
                 Рейтинг
               </div>
             </div>
+          </div>
+        </GlassCard>
+      </motion.div>
+
+      {/* Membership Status */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55 }}
+        className="mb-6"
+      >
+        <GlassCard className={`p-4 ${user.membership_status === 'paid' ? 'border-success/20' : 'border-warning/20'}`} hover={false}>
+          <div className="flex items-center justify-between">
+            <span className="text-foreground-secondary">Членство</span>
+            <span className={`font-medium ${user.membership_status === 'paid' ? 'text-success' : 'text-warning'}`}>
+              {user.membership_status === 'paid' ? '✓ Активно' : user.membership_status === 'pause' ? '⏸ Пауза' : '⏳ Не оплачено'}
+            </span>
           </div>
         </GlassCard>
       </motion.div>
