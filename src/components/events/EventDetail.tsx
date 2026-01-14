@@ -113,6 +113,59 @@ const EventDetail = ({
     }
   }, [event, user, isOpen]);
 
+  // Check payment status when returning from payment page
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    if (urlParams.get('payment') === 'success' && isOpen && user && participantId) {
+      checkPaymentStatusFromYookassa();
+      // Remove payment param from URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [isOpen, participantId]);
+
+  const checkPaymentStatusFromYookassa = async () => {
+    if (!participantId) return;
+
+    try {
+      // Get payment with external_payment_id
+      const { data: payment } = await supabase
+        .from('payments')
+        .select('id, status, external_payment_id')
+        .eq('participant_id', participantId)
+        .maybeSingle();
+
+      if (payment?.external_payment_id && payment.status === 'pending') {
+        console.log('Checking payment status in YooKassa:', payment.external_payment_id);
+        
+        // Check status in YooKassa
+        const { data, error } = await supabase.functions.invoke('check-payment', {
+          body: { payment_id: payment.external_payment_id }
+        });
+
+        console.log('YooKassa check result:', data, error);
+
+        if (data?.status === 'succeeded' || data?.paid) {
+          // Update status in DB
+          await supabase
+            .from('payments')
+            .update({ status: 'paid', paid_at: new Date().toISOString() })
+            .eq('id', payment.id);
+
+          setPaymentStatus('paid');
+          toast({ title: '✅ Оплата прошла успешно!' });
+        } else if (data?.status === 'canceled') {
+          setPaymentStatus('pending');
+          toast({ title: 'Платёж отменён', variant: 'destructive' });
+        }
+      } else if (payment?.status === 'paid') {
+        setPaymentStatus('paid');
+      }
+    } catch (error) {
+      console.error('Error checking payment status:', error);
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     const day = date.getDate();
