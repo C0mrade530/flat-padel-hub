@@ -32,21 +32,12 @@ interface EditEventSheetProps {
   onUpdated: () => void;
 }
 
-const eventTypeEmoji: Record<string, string> = {
-  training: "🎾",
-  tournament: "🏆",
-  stretching: "🧘",
-  other: "📅",
-  event: "📅",
-};
-
-const eventTypeLabel: Record<string, string> = {
-  training: "Тренировка",
-  tournament: "Турнир",
-  stretching: "Растяжка",
-  other: "Событие",
-  event: "Событие",
-};
+const eventTypes = [
+  { value: "training", label: "Тренировка", icon: "🎾" },
+  { value: "tournament", label: "Турнир", icon: "🏆" },
+  { value: "stretching", label: "Растяжка", icon: "🧘" },
+  { value: "event", label: "Другое", icon: "📅" },
+];
 
 export const EditEventSheet = ({ isOpen, onClose, event, onUpdated }: EditEventSheetProps) => {
   const [form, setForm] = useState({
@@ -64,7 +55,7 @@ export const EditEventSheet = ({ isOpen, onClose, event, onUpdated }: EditEventS
 
   useEffect(() => {
     if (event && isOpen) {
-      // Parse date from event_date (could be timestamp or date string)
+      // Parse date from event_date
       let dateStr = "";
       if (event.event_date) {
         const date = new Date(event.event_date);
@@ -92,19 +83,30 @@ export const EditEventSheet = ({ isOpen, onClose, event, onUpdated }: EditEventS
     haptic.impact("light");
 
     try {
+      // Only use fields that exist in the database!
+      const updateData = {
+        event_type: form.event_type,
+        event_date: form.event_date,
+        start_time: form.start_time,
+        end_time: form.end_time || null,
+        location: form.location,
+        max_seats: form.max_seats,
+        level: form.level === "any" ? null : form.level,
+        price: form.price,
+        description: form.description || null,
+      };
+
+      console.log("Updating event with data:", updateData);
+
       const { error } = await supabase
         .from("events")
-        .update({
-          event_date: form.event_date,
-          location: form.location,
-          max_seats: form.max_seats,
-          level: form.level === "any" ? null : form.level,
-          price: form.price,
-          description: form.description || null,
-        })
+        .update(updateData)
         .eq("id", event.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Update error:", error);
+        throw error;
+      }
 
       haptic.notification("success");
       toast({ title: "✅ Событие обновлено!" });
@@ -132,27 +134,26 @@ export const EditEventSheet = ({ isOpen, onClose, event, onUpdated }: EditEventS
 
         <div className="space-y-4 overflow-y-auto pb-32 pr-2" style={{ maxHeight: "calc(90vh - 180px)" }}>
           {/* Event Type */}
-
-          {/* Event Type */}
           <div>
-            <label className="text-sm text-muted-foreground mb-2 block">Тип</label>
+            <label className="text-sm text-muted-foreground mb-2 block">Тип события</label>
             <div className="flex gap-2 flex-wrap">
-              {["training", "tournament", "stretching", "event"].map((type) => (
+              {eventTypes.map((type) => (
                 <button
-                  key={type}
+                  key={type.value}
                   type="button"
                   onClick={() => {
                     haptic.selection();
-                    setForm({ ...form, event_type: type });
+                    setForm({ ...form, event_type: type.value });
                   }}
                   className={cn(
-                    "px-4 py-2 rounded-xl text-sm transition-all",
-                    form.event_type === type
+                    "px-4 py-2 rounded-xl text-sm transition-all flex items-center gap-2",
+                    form.event_type === type.value
                       ? "bg-primary text-primary-foreground"
                       : "bg-white/5 hover:bg-white/10"
                   )}
                 >
-                  {eventTypeEmoji[type]} {eventTypeLabel[type]}
+                  <span>{type.icon}</span>
+                  {type.label}
                 </button>
               ))}
             </div>
@@ -201,7 +202,7 @@ export const EditEventSheet = ({ isOpen, onClose, event, onUpdated }: EditEventS
               type="text"
               value={form.location}
               onChange={(e) => setForm({ ...form, location: e.target.value })}
-              placeholder="World Class Padel"
+              placeholder="Padel Arena Moscow"
               className="w-full p-3 rounded-xl bg-white/5 border border-white/10 focus:border-primary outline-none"
             />
           </div>
