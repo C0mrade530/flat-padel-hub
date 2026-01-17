@@ -2,24 +2,27 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Search, RefreshCw } from "lucide-react";
 import { GlassInput } from "@/components/ui/GlassInput";
-import { GlassPill } from "@/components/ui/GlassPill";
 import { EventCard } from "@/components/events/EventCard";
 import { EventDetail } from "@/components/events/EventDetail";
 import { EventCardSkeleton } from "@/components/ui/skeleton";
 import { useEvents, TransformedEvent } from "@/hooks/useEvents";
+import { useUserRegistrations } from "@/hooks/useUserRegistrations";
 import { useUser } from "@/contexts/UserContext";
 import { haptic } from "@/lib/telegram";
+import { cn } from "@/lib/utils";
 
 const filters = [
-  { id: "all", label: "Все" },
-  { id: "d", label: "D/D+" },
-  { id: "c", label: "C/C+" },
-  { id: "b", label: "B/B+" },
+  { id: "all", label: "Все", icon: null },
+  { id: "training", label: "Тренировки", icon: "🎾" },
+  { id: "tournament", label: "Турниры", icon: "🏆" },
+  { id: "stretching", label: "Растяжка", icon: "🧘" },
+  { id: "myLevel", label: "Мой уровень", icon: "📊" },
 ];
 
 const HomeScreen = () => {
   const { user } = useUser();
   const { events, loading, error, refetch } = useEvents();
+  const { isRegistered, isPaid, refetch: refetchRegistrations } = useUserRegistrations();
   
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
@@ -31,22 +34,31 @@ const HomeScreen = () => {
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Доброе утро";
-    if (hour < 17) return "Добрый день";
+    if (hour < 18) return "Добрый день";
     return "Добрый вечер";
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
     haptic.impact("light");
-    await refetch();
+    await Promise.all([refetch(), refetchRegistrations()]);
     setRefreshing(false);
   };
 
+  // Filter events by type/level and search
   const filteredEvents = events.filter((event) => {
-    if (activeFilter !== "all") {
-      const levelLower = event.level.toLowerCase();
-      if (!levelLower.includes(activeFilter)) return false;
+    // Filter by type
+    if (activeFilter === "myLevel") {
+      const userLevel = user?.level?.toLowerCase();
+      const eventLevel = event.level.toLowerCase();
+      if (eventLevel !== 'все' && eventLevel !== 'any' && userLevel && !eventLevel.includes(userLevel.charAt(0))) {
+        return false;
+      }
+    } else if (activeFilter !== "all") {
+      if (event.type !== activeFilter) return false;
     }
+    
+    // Filter by search
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       return (
@@ -58,22 +70,21 @@ const HomeScreen = () => {
     return true;
   });
 
-  const groupedEvents = filteredEvents.reduce((acc, event) => {
-    const today = new Date().toISOString().split("T")[0];
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
-    
-    let group = "Позже";
-    if (event.date === today) group = "Сегодня";
-    else if (event.date === tomorrow) group = "Завтра";
-    
-    if (!acc[group]) acc[group] = [];
-    acc[group].push(event);
-    return acc;
-  }, {} as Record<string, TransformedEvent[]>);
+  // Group events by time period
+  const today = new Date().toISOString().split("T")[0];
+  const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+  const todayEvents = filteredEvents.filter(e => e.date === today);
+  const weekEvents = filteredEvents.filter(e => e.date > today && e.date <= weekFromNow);
+  const laterEvents = filteredEvents.filter(e => e.date > weekFromNow);
 
   const handleEventClick = (event: TransformedEvent) => {
     haptic.impact("light");
     setSelectedEvent(event);
+  };
+
+  const handleEventsRefetch = async () => {
+    await Promise.all([refetch(), refetchRegistrations()]);
   };
 
   return (
@@ -86,16 +97,16 @@ const HomeScreen = () => {
         transition={{ delay: 0.1 }}
       >
         <div>
-          <p className="text-foreground-secondary text-sm mb-1">
-            {getGreeting()}, {userName} 👋
+          <p className="text-muted-foreground text-sm mb-1">
+            {getGreeting()}, {userName}! 👋
           </p>
-          <h1 className="text-2xl font-semibold text-foreground text-tight">
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">
             Найди свою игру
           </h1>
         </div>
         <motion.button
           onClick={handleRefresh}
-          className="p-2 rounded-xl glass border border-primary/10"
+          className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
           whileTap={{ scale: 0.95 }}
           animate={{ rotate: refreshing ? 360 : 0 }}
           transition={{ duration: 0.5 }}
@@ -106,7 +117,7 @@ const HomeScreen = () => {
 
       {/* Search */}
       <motion.div
-        className="mb-6"
+        className="mb-4"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
@@ -127,16 +138,22 @@ const HomeScreen = () => {
         transition={{ delay: 0.3 }}
       >
         {filters.map((filter) => (
-          <GlassPill
+          <button
             key={filter.id}
-            active={activeFilter === filter.id}
             onClick={() => {
               haptic.selection();
               setActiveFilter(filter.id);
             }}
+            className={cn(
+              "px-4 py-2 rounded-full text-sm whitespace-nowrap transition-all flex items-center gap-1.5",
+              activeFilter === filter.id 
+                ? "bg-primary text-primary-foreground font-medium" 
+                : "bg-white/5 hover:bg-white/10 text-foreground"
+            )}
           >
+            {filter.icon && <span>{filter.icon}</span>}
             {filter.label}
-          </GlassPill>
+          </button>
         ))}
       </motion.div>
 
@@ -153,7 +170,7 @@ const HomeScreen = () => {
       {/* Loading skeletons */}
       {loading && (
         <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
+          {[1, 2, 3, 4].map((i) => (
             <EventCardSkeleton key={i} />
           ))}
         </div>
@@ -163,38 +180,89 @@ const HomeScreen = () => {
       {!loading && !error && filteredEvents.length === 0 && (
         <div className="text-center py-12">
           <span className="text-5xl mb-4 block">🎾</span>
-          <p className="text-foreground-secondary">Нет доступных событий</p>
+          <h3 className="text-lg font-semibold mb-2">Нет событий</h3>
+          <p className="text-muted-foreground">Попробуйте изменить фильтры</p>
         </div>
       )}
 
-      {/* Events */}
-      {!loading && Object.entries(groupedEvents).map(([group, groupEvents], groupIndex) => (
-        <div key={group} className="mb-6">
-          <motion.div
-            className="flex items-center gap-4 mb-4"
+      {/* Today's events */}
+      {!loading && todayEvents.length > 0 && (
+        <section className="mb-6">
+          <motion.h2 
+            className="text-lg font-semibold mb-3 flex items-center gap-2"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 + groupIndex * 0.1 }}
+            transition={{ delay: 0.4 }}
           >
-            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-            <span className="text-xs font-medium text-foreground-tertiary uppercase tracking-widest">
-              {group}
-            </span>
-            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-          </motion.div>
-
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Сегодня
+          </motion.h2>
           <div className="space-y-4">
-            {groupEvents.map((event, index) => (
+            {todayEvents.map((event, index) => (
               <EventCard
                 key={event.id}
                 event={event}
                 index={index}
                 onClick={() => handleEventClick(event)}
+                isRegistered={isRegistered(event.id)}
+                isPaid={isPaid(event.id)}
               />
             ))}
           </div>
-        </div>
-      ))}
+        </section>
+      )}
+
+      {/* This week's events */}
+      {!loading && weekEvents.length > 0 && (
+        <section className="mb-6">
+          <motion.h2 
+            className="text-lg font-semibold mb-3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+          >
+            На этой неделе
+          </motion.h2>
+          <div className="space-y-4">
+            {weekEvents.map((event, index) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                index={index}
+                onClick={() => handleEventClick(event)}
+                isRegistered={isRegistered(event.id)}
+                isPaid={isPaid(event.id)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Later events */}
+      {!loading && laterEvents.length > 0 && (
+        <section className="mb-6">
+          <motion.h2 
+            className="text-lg font-semibold mb-3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6 }}
+          >
+            Позже
+          </motion.h2>
+          <div className="space-y-4">
+            {laterEvents.map((event, index) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                index={index}
+                onClick={() => handleEventClick(event)}
+                isRegistered={isRegistered(event.id)}
+                isPaid={isPaid(event.id)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Event Detail */}
       {selectedEvent && (
@@ -202,7 +270,7 @@ const HomeScreen = () => {
           event={selectedEvent}
           isOpen={!!selectedEvent}
           onClose={() => setSelectedEvent(null)}
-          onEventsRefetch={refetch}
+          onEventsRefetch={handleEventsRefetch}
         />
       )}
     </div>
