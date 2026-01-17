@@ -25,10 +25,10 @@ const AppContent = () => {
     );
   }
 
-  // In Telegram but user not found/registered
-  if (isTelegram && !user) {
-    return <NotRegistered />;
-  }
+  // Временно отключена проверка регистрации для тестирования
+  // if (isTelegram && !user) {
+  //   return <NotRegistered />;
+  // }
 
   const renderScreen = () => {
     switch (activeTab) {
