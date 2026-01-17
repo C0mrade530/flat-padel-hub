@@ -13,7 +13,6 @@ import { cn } from "@/lib/utils";
 
 interface EventData {
   id: string;
-  title: string;
   event_type?: string;
   event_date: string;
   start_time?: string;
@@ -51,7 +50,6 @@ const eventTypeLabel: Record<string, string> = {
 
 export const EditEventSheet = ({ isOpen, onClose, event, onUpdated }: EditEventSheetProps) => {
   const [form, setForm] = useState({
-    title: "",
     event_type: "training",
     event_date: "",
     start_time: "18:00",
@@ -74,7 +72,6 @@ export const EditEventSheet = ({ isOpen, onClose, event, onUpdated }: EditEventS
       }
       
       setForm({
-        title: event.title || "",
         event_type: event.event_type || "training",
         event_date: dateStr,
         start_time: event.start_time?.slice(0, 5) || "18:00",
@@ -98,7 +95,6 @@ export const EditEventSheet = ({ isOpen, onClose, event, onUpdated }: EditEventS
       const { error } = await supabase
         .from("events")
         .update({
-          title: form.title || eventTypeLabel[form.event_type] || "Событие",
           event_date: form.event_date,
           location: form.location,
           max_seats: form.max_seats,
@@ -135,17 +131,7 @@ export const EditEventSheet = ({ isOpen, onClose, event, onUpdated }: EditEventS
         </SheetHeader>
 
         <div className="space-y-4 overflow-y-auto pb-32 pr-2" style={{ maxHeight: "calc(90vh - 180px)" }}>
-          {/* Title */}
-          <div>
-            <label className="text-sm text-muted-foreground mb-2 block">Название</label>
-            <input
-              type="text"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder={eventTypeLabel[form.event_type] || "Название события"}
-              className="w-full p-3 rounded-xl bg-white/5 border border-white/10 focus:border-primary outline-none"
-            />
-          </div>
+          {/* Event Type */}
 
           {/* Event Type */}
           <div>

@@ -39,7 +39,6 @@ const seatOptions = [4, 6, 8, 12, 16, 20];
 
 export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventSheetProps) => {
   const [form, setForm] = useState({
-    title: "",
     event_type: "training",
     event_date: "",
     start_time: "18:00",
@@ -61,7 +60,6 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
       const defaultDate = tomorrow.toISOString().split("T")[0];
 
       setForm({
-        title: "",
         event_type: "training",
         event_date: defaultDate,
         start_time: "18:00",
@@ -90,7 +88,6 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
 
     try {
       const { error } = await supabase.from("events").insert({
-        title: form.title || eventTypeLabel[form.event_type] || "Событие",
         event_date: form.event_date,
         location: form.location,
         max_seats: form.max_seats,
@@ -98,7 +95,7 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
         level: form.level === "any" ? null : form.level,
         price: form.price,
         description: form.description || null,
-        status: "scheduled",
+        status: "published",
       });
 
       if (error) throw error;
@@ -128,15 +125,7 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
         </SheetHeader>
 
         <div className="space-y-5 overflow-y-auto pb-32 pr-2" style={{ maxHeight: "calc(90vh - 180px)" }}>
-          {/* Title */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground-secondary">Название</label>
-            <GlassInput
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder={eventTypeLabel[form.event_type] || "Название события"}
-            />
-          </div>
+          {/* Event Type */}
 
           {/* Event Type */}
           <div className="space-y-2">
