@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { supabase, cloudClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
+import { supabase as cloudClient } from '@/integrations/supabase/client';
 import { openLink, haptic } from '@/lib/telegram';
 import { toast } from '@/hooks/use-toast';
 
