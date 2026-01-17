@@ -87,8 +87,13 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
     haptic.impact("light");
 
     try {
+      // Combine date and time into a proper timestamp
+      const eventDateTime = form.start_time 
+        ? `${form.event_date}T${form.start_time}:00`
+        : form.event_date;
+
       const { error } = await supabase.from("events").insert({
-        event_date: form.event_date,
+        event_date: eventDateTime,
         location: form.location,
         max_seats: form.max_seats,
         current_seats: 0,
@@ -96,6 +101,9 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
         price: form.price,
         description: form.description || null,
         status: "published",
+        emoji: form.event_type === "training" ? "🎾" : 
+               form.event_type === "tournament" ? "🏆" : 
+               form.event_type === "stretching" ? "🧘" : "📅",
       });
 
       if (error) throw error;
@@ -125,8 +133,6 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
         </SheetHeader>
 
         <div className="space-y-5 overflow-y-auto pb-32 pr-2" style={{ maxHeight: "calc(90vh - 180px)" }}>
-          {/* Event Type */}
-
           {/* Event Type */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground-secondary">Тип</label>
