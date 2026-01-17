@@ -143,9 +143,11 @@ export const useRegistration = (): UseRegistrationResult => {
         }
       }
 
-      // 6. Create payment if price > 0
+      // 6. Create payment with 15-minute deadline if price > 0
       if (price > 0) {
         console.log('Creating payment for amount:', price);
+        const paymentDeadline = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // +15 minutes
+        
         const { data: payment, error: paymentError } = await supabase
           .from('payments')
           .insert({
@@ -154,6 +156,7 @@ export const useRegistration = (): UseRegistrationResult => {
             event_id: eventId,
             amount: price,
             status: 'pending',
+            payment_deadline: paymentDeadline,
           })
           .select()
           .single();
@@ -162,7 +165,7 @@ export const useRegistration = (): UseRegistrationResult => {
           console.error('Payment creation error:', paymentError);
           // Don't throw - registration succeeded
         } else {
-          console.log('Payment created:', payment);
+          console.log('Payment created with deadline:', payment);
         }
       }
 
@@ -210,10 +213,16 @@ export const useRegistration = (): UseRegistrationResult => {
       // Update to canceled
       const { error: updateError } = await supabase
         .from('event_participants')
-        .update({ status: 'canceled' })
+        .update({ status: 'canceled', canceled_at: new Date().toISOString() })
         .eq('id', participantData.id);
 
       if (updateError) throw updateError;
+
+      // Cancel related payment
+      await supabase
+        .from('payments')
+        .update({ status: 'canceled' })
+        .eq('participant_id', participantData.id);
 
       // Decrement seats if was confirmed
       if (participantData.status === 'confirmed') {

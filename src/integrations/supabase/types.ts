@@ -133,6 +133,7 @@ export type Database = {
           id: string
           paid_at: string | null
           participant_id: string
+          payment_deadline: string | null
           payment_provider: string | null
           payment_url: string | null
           status: string
@@ -147,6 +148,7 @@ export type Database = {
           id?: string
           paid_at?: string | null
           participant_id: string
+          payment_deadline?: string | null
           payment_provider?: string | null
           payment_url?: string | null
           status?: string
@@ -161,6 +163,7 @@ export type Database = {
           id?: string
           paid_at?: string | null
           participant_id?: string
+          payment_deadline?: string | null
           payment_provider?: string | null
           payment_url?: string | null
           status?: string

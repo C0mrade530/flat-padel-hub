@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence, useDragControls } from "framer-motion";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { GlassButton } from "@/components/ui/GlassButton";
@@ -11,6 +11,7 @@ import { usePayment } from "@/hooks/usePayment";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { PaymentTimer } from "@/components/PaymentTimer";
 
 interface EventDetailProps {
   event: {
@@ -60,6 +61,7 @@ const EventDetail = ({
   const [registrationStatus, setRegistrationStatus] = useState<'confirmed' | 'waiting' | null>(null);
   const [queuePosition, setQueuePosition] = useState<number>(1);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | null>(null);
+  const [paymentDeadline, setPaymentDeadline] = useState<string | null>(null);
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [acceptedOffer, setAcceptedOffer] = useState(false);
@@ -96,15 +98,17 @@ const EventDetail = ({
 
       const { data: payment } = await supabase
         .from('payments')
-        .select('id, status')
+        .select('id, status, payment_deadline')
         .eq('participant_id', reg.id)
         .maybeSingle();
 
       setPaymentStatus(payment?.status as 'pending' | 'paid' | null);
+      setPaymentDeadline(payment?.payment_deadline || null);
     } else {
       setRegistrationStatus(null);
       setParticipantId(null);
       setPaymentStatus(null);
+      setPaymentDeadline(null);
     }
   };
 
@@ -170,6 +174,7 @@ const EventDetail = ({
             .eq('id', payment.id);
           
           setPaymentStatus('paid');
+          setPaymentDeadline(null);
           toast({ title: '✅ Оплата подтверждена!' });
         } else {
           toast({ 
@@ -249,9 +254,31 @@ const EventDetail = ({
       setRegistrationStatus(null);
       setParticipantId(null);
       setPaymentStatus(null);
+      setPaymentDeadline(null);
       onEventsRefetch?.();
     }
   };
+
+  // Handler for payment timer expiration
+  const handlePaymentExpired = useCallback(async () => {
+    toast({ 
+      title: '⏰ Время истекло', 
+      description: 'Ваша бронь отменена',
+      variant: 'destructive' 
+    });
+    
+    // Cancel registration
+    if (event) {
+      await cancel(event.id);
+    }
+    
+    // Update state
+    setRegistrationStatus(null);
+    setParticipantId(null);
+    setPaymentStatus(null);
+    setPaymentDeadline(null);
+    onEventsRefetch?.();
+  }, [event, cancel, onEventsRefetch]);
 
   const handlePayClick = async () => {
     if (!participantId || !user) return;
@@ -449,6 +476,14 @@ const EventDetail = ({
                         </div>
                       ) : event.price > 0 ? (
                         <div className="space-y-3">
+                          {/* Payment Timer */}
+                          {paymentDeadline && (
+                            <PaymentTimer 
+                              deadline={paymentDeadline} 
+                              onExpired={handlePaymentExpired} 
+                            />
+                          )}
+
                           {/* Offer checkbox */}
                           <label className="flex items-start gap-3 cursor-pointer">
                             <input
