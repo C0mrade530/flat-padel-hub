@@ -38,25 +38,37 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   const loadUser = async () => {
     try {
-      // Пробуем получить telegram_id из Telegram WebApp
       const tgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
       
       console.log('Loading user, tgId:', tgId);
       
-      let query = supabase.from('users').select('*');
+      let data = null;
       
       if (tgId) {
-        query = query.eq('telegram_id', tgId);
+        const result = await supabase
+          .from('users')
+          .select('*')
+          .eq('telegram_id', tgId)
+          .maybeSingle();
+        data = result.data;
+        console.log('Telegram user result:', result);
       }
       
-      const { data, error } = await query.limit(1).maybeSingle();
-      
-      console.log('User loaded:', data, error);
+      // Fallback - загружаем владельца для dev режима
+      if (!data) {
+        const result = await supabase
+          .from('users')
+          .select('*')
+          .eq('role', 'owner')
+          .limit(1)
+          .maybeSingle();
+        data = result.data;
+        console.log('Fallback owner result:', result);
+        setIsDevMode(true);
+      }
       
       if (data) {
         setUser(data);
-        // Если нет telegram_id в WebApp - это dev mode
-        setIsDevMode(!window.Telegram?.WebApp?.initDataUnsafe?.user?.id);
       }
     } catch (e) {
       console.error(e);
