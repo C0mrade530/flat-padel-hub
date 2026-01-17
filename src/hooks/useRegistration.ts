@@ -46,27 +46,15 @@ export const useRegistration = (): UseRegistrationResult => {
     setLoading(true);
 
     try {
-      // 1. Check if already registered
-      const { data: existingReg, error: existingError } = await supabase
+      // 1. Check for existing registration (including canceled!)
+      const { data: existingReg } = await supabase
         .from('event_participants')
-        .select('id')
+        .select('id, status')
         .eq('event_id', eventId)
         .eq('user_id', user.id)
-        .neq('status', 'canceled')
         .maybeSingle();
 
-      if (existingError) {
-        console.error('Error checking existing registration:', existingError);
-      }
-
-      if (existingReg) {
-        console.log('Already registered:', existingReg);
-        toast({
-          title: 'Уже записаны',
-          description: 'Вы уже записаны на это событие',
-        });
-        return false;
-      }
+      console.log('Existing registration:', existingReg);
 
       // 2. Get event to check seats
       const { data: event, error: eventError } = await supabase
@@ -75,17 +63,10 @@ export const useRegistration = (): UseRegistrationResult => {
         .eq('id', eventId)
         .single();
 
-      if (eventError) {
+      if (eventError || !event) {
         console.error('Event fetch error:', eventError);
         throw new Error('Событие не найдено');
       }
-
-      if (!event) {
-        console.error('Event not found');
-        throw new Error('Событие не найдено');
-      }
-
-      console.log('Event data:', event);
 
       const currentSeats = (event as any).current_seats as number;
       const maxSeats = (event as any).max_seats as number;
@@ -93,41 +74,71 @@ export const useRegistration = (): UseRegistrationResult => {
       const participantStatus = hasSeats ? 'confirmed' : 'waiting';
 
       console.log('Seats check:', { currentSeats, maxSeats, hasSeats, participantStatus });
-      
-      // 3. Calculate queue position if waiting
-      let queuePosition: number | null = null;
-      if (!hasSeats) {
-        const { count } = await supabase
+
+      let participantId: string;
+
+      // 3. Handle existing registration
+      if (existingReg) {
+        if (existingReg.status === 'confirmed' || existingReg.status === 'waiting') {
+          // Already registered
+          toast({ title: 'Вы уже записаны на это событие' });
+          return false;
+        }
+
+        // If canceled - RESTORE it
+        if (existingReg.status === 'canceled') {
+          let queuePosition: number | null = null;
+          if (!hasSeats) {
+            const { count } = await supabase
+              .from('event_participants')
+              .select('*', { count: 'exact', head: true })
+              .eq('event_id', eventId)
+              .eq('status', 'waiting');
+            queuePosition = (count || 0) + 1;
+          }
+
+          const { error: updateError } = await supabase
+            .from('event_participants')
+            .update({ 
+              status: participantStatus,
+              queue_position: queuePosition,
+              canceled_at: null,
+            })
+            .eq('id', existingReg.id);
+
+          if (updateError) throw updateError;
+          participantId = existingReg.id;
+          console.log('Restored registration:', participantId);
+        } else {
+          participantId = existingReg.id;
+        }
+      } else {
+        // 4. Create new registration
+        let queuePosition: number | null = null;
+        if (!hasSeats) {
+          const { count } = await supabase
+            .from('event_participants')
+            .select('*', { count: 'exact', head: true })
+            .eq('event_id', eventId)
+            .eq('status', 'waiting');
+          queuePosition = (count || 0) + 1;
+        }
+
+        const { data: newParticipant, error: insertError } = await supabase
           .from('event_participants')
-          .select('*', { count: 'exact', head: true })
-          .eq('event_id', eventId)
-          .eq('status', 'waiting');
-        
-        queuePosition = (count || 0) + 1;
-        console.log('Queue position:', queuePosition);
+          .insert({
+            event_id: eventId,
+            user_id: user.id,
+            status: participantStatus,
+            queue_position: queuePosition,
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+        participantId = (newParticipant as any).id;
+        console.log('Created new registration:', participantId);
       }
-
-      // 4. Create participant record
-      const participantData = {
-        event_id: eventId,
-        user_id: user.id,
-        status: participantStatus,
-        queue_position: queuePosition,
-      };
-      console.log('Creating participant:', participantData);
-
-      const { data: participant, error: participantError } = await supabase
-        .from('event_participants')
-        .insert(participantData)
-        .select()
-        .single();
-
-      if (participantError) {
-        console.error('Participant creation error:', participantError);
-        throw participantError;
-      }
-
-      console.log('Participant created:', participant);
 
       // 5. Update current_seats if confirmed
       if (hasSeats) {
@@ -143,29 +154,49 @@ export const useRegistration = (): UseRegistrationResult => {
         }
       }
 
-      // 6. Create payment with 15-minute deadline if price > 0
+      // 6. Handle payment
       if (price > 0) {
-        console.log('Creating payment for amount:', price);
-        const paymentDeadline = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // +15 minutes
-        
-        const { data: payment, error: paymentError } = await supabase
+        // Check for existing payment
+        const { data: existingPayment } = await supabase
           .from('payments')
-          .insert({
-            participant_id: (participant as any).id,
-            user_id: user.id,
-            event_id: eventId,
-            amount: price,
-            status: 'pending',
-            payment_deadline: paymentDeadline,
-          })
-          .select()
-          .single();
+          .select('id, status')
+          .eq('participant_id', participantId)
+          .maybeSingle();
 
-        if (paymentError) {
-          console.error('Payment creation error:', paymentError);
-          // Don't throw - registration succeeded
+        const paymentDeadline = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+        if (existingPayment) {
+          // Update existing payment
+          await supabase
+            .from('payments')
+            .update({ 
+              status: 'pending',
+              payment_deadline: paymentDeadline,
+              external_payment_id: null,
+              paid_at: null,
+            })
+            .eq('id', existingPayment.id);
+          console.log('Updated existing payment:', existingPayment.id);
         } else {
-          console.log('Payment created with deadline:', payment);
+          // Create new payment
+          const { data: newPayment, error: paymentError } = await supabase
+            .from('payments')
+            .insert({
+              participant_id: participantId,
+              user_id: user.id,
+              event_id: eventId,
+              amount: price,
+              status: 'pending',
+              payment_deadline: paymentDeadline,
+            })
+            .select()
+            .single();
+
+          if (paymentError) {
+            console.error('Payment creation error:', paymentError);
+          } else {
+            console.log('Created new payment:', newPayment);
+          }
         }
       }
 
@@ -173,17 +204,27 @@ export const useRegistration = (): UseRegistrationResult => {
         title: hasSeats ? '✅ Записано!' : '⏳ В очереди',
         description: hasSeats 
           ? 'Вы успешно записаны на событие' 
-          : `Вы ${queuePosition}-й в очереди`,
+          : `Вы в очереди`,
       });
 
       return true;
     } catch (err: any) {
       console.error('Registration error:', err);
-      toast({
-        title: 'Ошибка',
-        description: err?.message || 'Не удалось записаться',
-        variant: 'destructive',
-      });
+      
+      // Handle duplicate key error
+      if (err.code === '23505' || err.message?.includes('duplicate')) {
+        toast({ 
+          title: 'Ошибка', 
+          description: 'Попробуйте обновить страницу',
+          variant: 'destructive' 
+        });
+      } else {
+        toast({
+          title: 'Ошибка',
+          description: err?.message || 'Не удалось записаться',
+          variant: 'destructive',
+        });
+      }
       return false;
     } finally {
       setLoading(false);
