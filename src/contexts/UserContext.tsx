@@ -36,14 +36,18 @@ export const UserProvider = ({ children }: UserProviderProps) => {
     try {
       setLoading(true);
       
-      // Получаем данные из Telegram WebApp
       const tg = window.Telegram?.WebApp;
       const tgUser = tg?.initDataUnsafe?.user;
       
-      console.log('Telegram user:', tgUser);
+      // ОТЛАДКА - покажи в консоли
+      console.log('=== DEBUG ===');
+      console.log('Telegram WebApp:', tg);
+      console.log('TG User:', tgUser);
+      console.log('TG User ID:', tgUser?.id);
+      console.log('TG User ID type:', typeof tgUser?.id);
       
       // Mark if running in Telegram
-      setIsTelegram(!!tgUser?.id);
+      setIsTelegram(!!tg);
       
       if (tgUser?.id) {
         // Ищем пользователя по telegram_id
@@ -51,38 +55,36 @@ export const UserProvider = ({ children }: UserProviderProps) => {
           .from('users')
           .select('*')
           .eq('telegram_id', tgUser.id)
-          .maybeSingle();
+          .single();
         
-        console.log('DB result:', data, error);
+        console.log('Supabase result:', { data, error });
         
-        if (data) {
+        if (data && !error) {
           setUser(data as DbUser);
           setIsDevMode(false);
+          return;
         } else {
           console.log('User not found for telegram_id:', tgUser.id);
-          setUser(null);
-        }
-      } else {
-        console.log('Not in Telegram, using fallback');
-        // Fallback для браузера - берём первого owner
-        if (import.meta.env.DEV) {
-          const { data } = await supabase
-            .from('users')
-            .select('*')
-            .eq('role', 'owner')
-            .limit(1)
-            .maybeSingle();
-          
-          if (data) {
-            console.log('DEV MODE: Using dev user:', data.id);
-            setUser(data as DbUser);
-            setIsDevMode(true);
-          }
         }
       }
+      
+      // Fallback - если не в Telegram или пользователь не найден
+      // Берём первого пользователя для тестирования
+      console.log('Using fallback - loading first user');
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .limit(1)
+        .single();
+      
+      console.log('Fallback user:', data);
+      
+      if (data) {
+        setUser(data as DbUser);
+        setIsDevMode(!tgUser);
+      }
     } catch (err) {
-      console.error('Init user error:', err);
-      setUser(null);
+      console.error('Error:', err);
     } finally {
       setLoading(false);
     }
