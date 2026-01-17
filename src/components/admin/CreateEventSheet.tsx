@@ -20,19 +20,11 @@ interface CreateEventSheetProps {
 }
 
 const eventTypes = [
-  { value: "training", label: "🎾 Тренировка" },
-  { value: "tournament", label: "🏆 Турнир" },
-  { value: "stretching", label: "🧘 Растяжка" },
-  { value: "event", label: "📅 Другое" },
+  { value: "training", label: "Тренировка", icon: "🎾" },
+  { value: "tournament", label: "Турнир", icon: "🏆" },
+  { value: "stretching", label: "Растяжка", icon: "🧘" },
+  { value: "event", label: "Другое", icon: "📅" },
 ];
-
-const eventTypeLabel: Record<string, string> = {
-  training: "Тренировка",
-  tournament: "Турнир",
-  stretching: "Растяжка",
-  event: "Событие",
-  other: "Событие",
-};
 
 const levels = ["any", "D", "D+", "C", "C+", "B", "B+"];
 const seatOptions = [4, 6, 8, 12, 16, 20];
@@ -54,7 +46,6 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
   // Reset form when opened
   useEffect(() => {
     if (isOpen) {
-      // Set default date to tomorrow
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       const defaultDate = tomorrow.toISOString().split("T")[0];
@@ -74,12 +65,21 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
   }, [isOpen]);
 
   const handleSubmit = async () => {
+    // Validation
+    if (!form.event_type) {
+      toast({ title: "Выберите тип события", variant: "destructive" });
+      return;
+    }
     if (!form.event_date) {
-      toast({
-        title: "Ошибка",
-        description: "Выберите дату события",
-        variant: "destructive",
-      });
+      toast({ title: "Выберите дату", variant: "destructive" });
+      return;
+    }
+    if (!form.start_time) {
+      toast({ title: "Укажите время начала", variant: "destructive" });
+      return;
+    }
+    if (!form.location) {
+      toast({ title: "Укажите место", variant: "destructive" });
       return;
     }
 
@@ -87,36 +87,39 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
     haptic.impact("light");
 
     try {
-      // Combine date and time into a proper timestamp
-      const eventDateTime = form.start_time 
-        ? `${form.event_date}T${form.start_time}:00`
-        : form.event_date;
-
-      const { error } = await supabase.from("events").insert({
-        event_date: eventDateTime,
+      // Only use fields that exist in the database!
+      const insertData = {
+        event_type: form.event_type,
+        event_date: form.event_date,
+        start_time: form.start_time,
+        end_time: form.end_time || null,
         location: form.location,
-        max_seats: form.max_seats,
+        max_seats: form.max_seats || 8,
         current_seats: 0,
         level: form.level === "any" ? null : form.level,
-        price: form.price,
+        price: form.price || 0,
         description: form.description || null,
-        status: "published",
-        emoji: form.event_type === "training" ? "🎾" : 
-               form.event_type === "tournament" ? "🏆" : 
-               form.event_type === "stretching" ? "🧘" : "📅",
-      });
+        status: "scheduled",
+      };
 
-      if (error) throw error;
+      console.log("Creating event with data:", insertData);
+
+      const { error } = await supabase.from("events").insert(insertData);
+
+      if (error) {
+        console.error("Insert error:", error);
+        throw error;
+      }
 
       haptic.notification("success");
-      toast({ title: "Событие создано!" });
+      toast({ title: "✅ Событие создано!" });
       onCreated();
       onClose();
     } catch (error: any) {
       console.error("Create event error:", error);
       haptic.notification("error");
       toast({
-        title: "Ошибка",
+        title: "Ошибка создания",
         description: error.message || "Не удалось создать событие",
         variant: "destructive",
       });
@@ -135,7 +138,7 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
         <div className="space-y-5 overflow-y-auto pb-32 pr-2" style={{ maxHeight: "calc(90vh - 180px)" }}>
           {/* Event Type */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground-secondary">Тип</label>
+            <label className="text-sm font-medium text-foreground-secondary">Тип события</label>
             <div className="flex flex-wrap gap-2">
               {eventTypes.map((type) => (
                 <button
@@ -146,12 +149,13 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
                     setForm({ ...form, event_type: type.value });
                   }}
                   className={cn(
-                    "px-4 py-2 rounded-xl text-sm transition-all",
+                    "px-4 py-2 rounded-xl text-sm transition-all flex items-center gap-2",
                     form.event_type === type.value
                       ? "bg-primary text-primary-foreground"
                       : "bg-white/5 hover:bg-white/10"
                   )}
                 >
+                  <span>{type.icon}</span>
                   {type.label}
                 </button>
               ))}
@@ -255,9 +259,9 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
             </div>
           </div>
 
-          {/* Price - Improved with input + quick buttons */}
+          {/* Price */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground-secondary">Стоимость участия (₽)</label>
+            <label className="text-sm font-medium text-foreground-secondary">Стоимость (₽)</label>
             <div className="relative">
               <input
                 type="number"
@@ -271,7 +275,6 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
               />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">₽</span>
             </div>
-            {/* Quick price buttons */}
             <div className="flex gap-2 flex-wrap">
               {[0, 1000, 2000, 3000, 5000].map((amount) => (
                 <button
@@ -304,7 +307,7 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
           </div>
         </div>
 
-        {/* Submit - Fixed at bottom */}
+        {/* Submit */}
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-background border-t border-white/10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
