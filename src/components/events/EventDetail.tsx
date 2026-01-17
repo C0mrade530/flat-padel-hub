@@ -83,7 +83,9 @@ const EventDetail = ({
   const reloadStatus = async () => {
     if (!user || !event) return;
 
-    const { data: reg } = await supabase
+    console.log('Reloading status for event:', event.id, 'user:', user.id);
+
+    const { data: reg, error: regError } = await supabase
       .from('event_participants')
       .select('id, status, queue_position')
       .eq('event_id', event.id)
@@ -91,19 +93,35 @@ const EventDetail = ({
       .neq('status', 'canceled')
       .maybeSingle();
 
+    console.log('Participant data:', reg, 'error:', regError);
+
     if (reg) {
       setRegistrationStatus(reg.status as 'confirmed' | 'waiting');
       setQueuePosition(reg.queue_position || 1);
       setParticipantId(reg.id);
 
-      const { data: payment } = await supabase
+      const { data: payment, error: paymentError } = await supabase
         .from('payments')
-        .select('id, status, payment_deadline')
+        .select('id, status, payment_deadline, external_payment_id')
         .eq('participant_id', reg.id)
         .maybeSingle();
 
-      setPaymentStatus(payment?.status as 'pending' | 'paid' | null);
-      setPaymentDeadline(payment?.payment_deadline || null);
+      console.log('Payment data:', payment, 'error:', paymentError);
+
+      if (payment) {
+        setPaymentStatus(payment.status as 'pending' | 'paid' | null);
+        
+        // Only set deadline if payment is pending and deadline exists
+        if (payment.status === 'pending' && payment.payment_deadline) {
+          console.log('Setting payment deadline:', payment.payment_deadline);
+          setPaymentDeadline(payment.payment_deadline);
+        } else {
+          setPaymentDeadline(null);
+        }
+      } else {
+        setPaymentStatus(null);
+        setPaymentDeadline(null);
+      }
     } else {
       setRegistrationStatus(null);
       setParticipantId(null);
@@ -135,6 +153,7 @@ const EventDetail = ({
     if (!user || !event) return;
     
     setCheckingPayment(true);
+    console.log('Checking payment manually...');
     
     try {
       const { data: reg } = await supabase
@@ -144,6 +163,8 @@ const EventDetail = ({
         .eq('user_id', user.id)
         .neq('status', 'canceled')
         .maybeSingle();
+      
+      console.log('Found participant:', reg);
       
       if (!reg) {
         toast({ title: 'Запись не найдена', variant: 'destructive' });
@@ -156,30 +177,43 @@ const EventDetail = ({
         .eq('participant_id', reg.id)
         .maybeSingle();
       
+      console.log('Found payment:', payment);
+      
+      // If already paid in DB
       if (payment?.status === 'paid') {
         setPaymentStatus('paid');
+        setPaymentDeadline(null);
         toast({ title: '✅ Оплата подтверждена!' });
         return;
       }
       
+      // If has external payment ID - check with YooKassa
       if (payment?.external_payment_id) {
-        const { data: checkResult } = await supabase.functions.invoke('check-payment', {
+        console.log('Checking with YooKassa:', payment.external_payment_id);
+        
+        const { data: checkResult, error: checkError } = await supabase.functions.invoke('check-payment', {
           body: { payment_id: payment.external_payment_id }
         });
         
+        console.log('YooKassa result:', checkResult, 'error:', checkError);
+        
         if (checkResult?.status === 'succeeded' || checkResult?.paid === true) {
-          await supabase
+          // Update payment in DB
+          const { error: updateError } = await supabase
             .from('payments')
             .update({ status: 'paid', paid_at: new Date().toISOString() })
             .eq('id', payment.id);
           
+          console.log('Update payment result:', updateError);
+          
+          // Update UI
           setPaymentStatus('paid');
           setPaymentDeadline(null);
           toast({ title: '✅ Оплата подтверждена!' });
         } else {
           toast({ 
             title: 'Оплата ещё не получена', 
-            description: 'Статус: ' + (checkResult?.status || 'неизвестно'),
+            description: `Статус: ${checkResult?.status || 'неизвестно'}`,
           });
         }
       } else {
@@ -189,6 +223,7 @@ const EventDetail = ({
         });
       }
     } catch (error: any) {
+      console.error('Check payment error:', error);
       toast({ 
         title: 'Ошибка проверки', 
         description: error.message,
