@@ -33,75 +33,59 @@ export const UserProvider = ({ children }: UserProviderProps) => {
   const [isTelegram, setIsTelegram] = useState(false);
 
   const fetchUser = async () => {
-    const tg = (window as any).Telegram?.WebApp;
-    const tgUser = tg?.initDataUnsafe?.user;
-
-    console.log('Telegram WebApp:', !!tg, 'User:', tgUser);
-
-    // Mark if running in Telegram
-    setIsTelegram(!!tgUser?.id);
-
-    if (tgUser?.id) {
-      // Real Telegram user
-      try {
+    try {
+      setLoading(true);
+      
+      // Получаем данные из Telegram WebApp
+      const tg = window.Telegram?.WebApp;
+      const tgUser = tg?.initDataUnsafe?.user;
+      
+      console.log('Telegram user:', tgUser);
+      
+      // Mark if running in Telegram
+      setIsTelegram(!!tgUser?.id);
+      
+      if (tgUser?.id) {
+        // Ищем пользователя по telegram_id
         const { data, error } = await supabase
           .from('users')
           .select('*')
           .eq('telegram_id', tgUser.id)
           .maybeSingle();
-
-        if (error) throw error;
-
+        
+        console.log('DB result:', data, error);
+        
         if (data) {
-          console.log('Found Telegram user:', data.id);
           setUser(data as DbUser);
+          setIsDevMode(false);
         } else {
-          // Create new user if not exists
-          console.log('Creating new Telegram user...');
-          const newUser = {
-            telegram_id: tgUser.id,
-            display_name: `${tgUser.first_name || ''} ${tgUser.last_name || ''}`.trim() || 'Игрок',
-            username: tgUser.username || null,
-            avatar_url: tgUser.photo_url || null,
-            level: 'D',
-            role: 'player' as const,
-            membership_status: 'unpaid',
-          };
-
-          const { data: createdUser, error: createError } = await supabase
-            .from('users')
-            .insert(newUser)
-            .select()
-            .single();
-
-          if (createError) throw createError;
-          console.log('Created Telegram user:', createdUser.id);
-          setUser(createdUser as DbUser);
+          console.log('User not found for telegram_id:', tgUser.id);
+          setUser(null);
         }
-        setIsDevMode(false);
-      } catch (error) {
-        console.error('Error fetching/creating Telegram user:', error);
-        setUser(null);
+      } else {
+        console.log('Not in Telegram, using fallback');
+        // Fallback для браузера - берём первого owner
+        if (import.meta.env.DEV) {
+          const { data } = await supabase
+            .from('users')
+            .select('*')
+            .eq('role', 'owner')
+            .limit(1)
+            .maybeSingle();
+          
+          if (data) {
+            console.log('DEV MODE: Using dev user:', data.id);
+            setUser(data as DbUser);
+            setIsDevMode(true);
+          }
+        }
       }
-    } else if (import.meta.env.DEV) {
-      // Dev mode — only when NOT in Telegram and DEV environment
-      console.log('DEV MODE: No Telegram, using dev user...');
-      
-      const { data: devUser } = await supabase
-        .from('users')
-        .select('*')
-        .eq('role', 'owner')
-        .limit(1)
-        .maybeSingle();
-
-      if (devUser) {
-        console.log('DEV MODE: Using dev user:', devUser.id);
-        setUser(devUser as DbUser);
-        setIsDevMode(true);
-      }
+    } catch (err) {
+      console.error('Init user error:', err);
+      setUser(null);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
