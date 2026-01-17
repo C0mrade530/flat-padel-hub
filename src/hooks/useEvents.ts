@@ -32,32 +32,18 @@ export const useEvents = () => {
     setError(null);
 
     try {
-      const now = new Date().toISOString();
-      
-      console.log('Fetching events, now:', now);
-      
       const { data, error: fetchError } = await supabase
         .from('events')
-        .select(`
-          *,
-          event_participants (
-            id,
-            user_id,
-            status,
-            users (
-              id,
-              display_name,
-              avatar_url
-            )
-          )
-        `)
-        .eq('status', 'published')
-        .gte('event_date', now)
+        .select('*')
+        .eq('status', 'scheduled')
         .order('event_date', { ascending: true });
 
-      console.log('Events loaded:', data, fetchError);
+      if (fetchError) {
+        console.error('Error loading events:', fetchError);
+        throw fetchError;
+      }
 
-      if (fetchError) throw fetchError;
+      console.log('Loaded events:', data);
 
       const transformed: TransformedEvent[] = (data || []).map((event: any) => {
         const eventDate = new Date(event.event_date);
