@@ -8,10 +8,10 @@ import {
 } from "@/components/ui/sheet";
 import { GlassButton } from "@/components/ui/GlassButton";
 import { GlassInput } from "@/components/ui/GlassInput";
-import { GlassPill } from "@/components/ui/GlassPill";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { haptic } from "@/lib/telegram";
+import { cn } from "@/lib/utils";
 
 interface CreateEventSheetProps {
   isOpen: boolean;
@@ -23,14 +23,23 @@ const eventTypes = [
   { value: "training", label: "🎾 Тренировка" },
   { value: "tournament", label: "🏆 Турнир" },
   { value: "stretching", label: "🧘 Растяжка" },
-  { value: "other", label: "📅 Другое" },
+  { value: "event", label: "📅 Другое" },
 ];
 
+const eventTypeLabel: Record<string, string> = {
+  training: "Тренировка",
+  tournament: "Турнир",
+  stretching: "Растяжка",
+  event: "Событие",
+  other: "Событие",
+};
+
 const levels = ["any", "D", "D+", "C", "C+", "B", "B+"];
-const seatOptions = [4, 6, 8, 12, 16];
+const seatOptions = [4, 6, 8, 12, 16, 20];
 
 export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventSheetProps) => {
   const [form, setForm] = useState({
+    title: "",
     event_type: "training",
     event_date: "",
     start_time: "18:00",
@@ -38,7 +47,7 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
     location: "Padel Arena Moscow",
     max_seats: 8,
     level: "any",
-    price: 2500,
+    price: 0,
     description: "",
   });
   const [loading, setLoading] = useState(false);
@@ -46,15 +55,21 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
   // Reset form when opened
   useEffect(() => {
     if (isOpen) {
+      // Set default date to tomorrow
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const defaultDate = tomorrow.toISOString().split("T")[0];
+
       setForm({
+        title: "",
         event_type: "training",
-        event_date: "",
+        event_date: defaultDate,
         start_time: "18:00",
         end_time: "20:00",
         location: "Padel Arena Moscow",
         max_seats: 8,
         level: "any",
-        price: 2500,
+        price: 0,
         description: "",
       });
     }
@@ -75,10 +90,8 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
 
     try {
       const { error } = await supabase.from("events").insert({
-        event_type: form.event_type,
+        title: form.title || eventTypeLabel[form.event_type] || "Событие",
         event_date: form.event_date,
-        start_time: form.start_time,
-        end_time: form.end_time,
         location: form.location,
         max_seats: form.max_seats,
         current_seats: 0,
@@ -109,27 +122,43 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent side="bottom" className="h-[90vh] overflow-y-auto bg-background border-t border-primary/10">
-        <SheetHeader className="mb-6">
+      <SheetContent side="bottom" className="h-[90vh] overflow-hidden bg-background border-t border-primary/10">
+        <SheetHeader className="mb-4">
           <SheetTitle className="text-foreground text-xl">Новое событие</SheetTitle>
         </SheetHeader>
 
-        <div className="space-y-6 pb-6">
+        <div className="space-y-5 overflow-y-auto pb-32 pr-2" style={{ maxHeight: "calc(90vh - 180px)" }}>
+          {/* Title */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground-secondary">Название</label>
+            <GlassInput
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder={eventTypeLabel[form.event_type] || "Название события"}
+            />
+          </div>
+
           {/* Event Type */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground-secondary">Тип</label>
             <div className="flex flex-wrap gap-2">
               {eventTypes.map((type) => (
-                <GlassPill
+                <button
                   key={type.value}
-                  active={form.event_type === type.value}
+                  type="button"
                   onClick={() => {
                     haptic.selection();
                     setForm({ ...form, event_type: type.value });
                   }}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-sm transition-all",
+                    form.event_type === type.value
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-white/5 hover:bg-white/10"
+                  )}
                 >
                   {type.label}
-                </GlassPill>
+                </button>
               ))}
             </div>
           </div>
@@ -141,7 +170,9 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
               type="date"
               value={form.event_date}
               onChange={(e) => setForm({ ...form, event_date: e.target.value })}
-              className="w-full h-12 px-4 rounded-xl glass border border-primary/10 bg-transparent text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              min={new Date().toISOString().split("T")[0]}
+              className="w-full p-4 rounded-xl bg-white/5 border border-white/10 focus:border-primary outline-none cursor-pointer"
+              style={{ colorScheme: "dark" }}
             />
           </div>
 
@@ -153,7 +184,8 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
                 type="time"
                 value={form.start_time}
                 onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-                className="w-full h-12 px-4 rounded-xl glass border border-primary/10 bg-transparent text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full h-12 px-4 rounded-xl bg-white/5 border border-white/10 focus:border-primary outline-none"
+                style={{ colorScheme: "dark" }}
               />
             </div>
             <div className="space-y-2">
@@ -162,7 +194,8 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
                 type="time"
                 value={form.end_time}
                 onChange={(e) => setForm({ ...form, end_time: e.target.value })}
-                className="w-full h-12 px-4 rounded-xl glass border border-primary/10 bg-transparent text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full h-12 px-4 rounded-xl bg-white/5 border border-white/10 focus:border-primary outline-none"
+                style={{ colorScheme: "dark" }}
               />
             </div>
           </div>
@@ -180,18 +213,24 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
           {/* Max Seats */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground-secondary">Макс. участников</label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {seatOptions.map((num) => (
-                <GlassPill
+                <button
                   key={num}
-                  active={form.max_seats === num}
+                  type="button"
                   onClick={() => {
                     haptic.selection();
                     setForm({ ...form, max_seats: num });
                   }}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-sm transition-all",
+                    form.max_seats === num
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-white/5 hover:bg-white/10"
+                  )}
                 >
                   {num}
-                </GlassPill>
+                </button>
               ))}
             </div>
           </div>
@@ -201,31 +240,60 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
             <label className="text-sm font-medium text-foreground-secondary">Уровень</label>
             <div className="flex flex-wrap gap-2">
               {levels.map((level) => (
-                <GlassPill
+                <button
                   key={level}
-                  active={form.level === level}
+                  type="button"
                   onClick={() => {
                     haptic.selection();
                     setForm({ ...form, level });
                   }}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-sm transition-all",
+                    form.level === level
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-white/5 hover:bg-white/10"
+                  )}
                 >
                   {level === "any" ? "Любой" : level}
-                </GlassPill>
+                </button>
               ))}
             </div>
           </div>
 
-          {/* Price */}
+          {/* Price - Improved with input + quick buttons */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground-secondary">Цена (₽)</label>
-            <input
-              type="number"
-              value={form.price}
-              onChange={(e) => setForm({ ...form, price: parseInt(e.target.value) || 0 })}
-              min={0}
-              step={100}
-              className="w-full h-12 px-4 rounded-xl glass border border-primary/10 bg-transparent text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
+            <label className="text-sm font-medium text-foreground-secondary">Стоимость участия (₽)</label>
+            <div className="relative">
+              <input
+                type="number"
+                inputMode="numeric"
+                value={form.price || ""}
+                onChange={(e) => setForm({ ...form, price: parseInt(e.target.value) || 0 })}
+                placeholder="0"
+                min="0"
+                step="100"
+                className="w-full p-4 pr-12 rounded-xl bg-white/5 border border-white/10 focus:border-primary outline-none text-xl font-bold"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">₽</span>
+            </div>
+            {/* Quick price buttons */}
+            <div className="flex gap-2 flex-wrap">
+              {[0, 1000, 2000, 3000, 5000].map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  onClick={() => setForm({ ...form, price: amount })}
+                  className={cn(
+                    "px-3 py-1 rounded-lg text-sm transition-all",
+                    form.price === amount
+                      ? "bg-primary/20 text-primary border border-primary"
+                      : "bg-white/5 hover:bg-white/10"
+                  )}
+                >
+                  {amount === 0 ? "Бесплатно" : amount.toLocaleString("ru-RU")}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Description */}
@@ -236,11 +304,13 @@ export const CreateEventSheet = ({ isOpen, onClose, onCreated }: CreateEventShee
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               placeholder="Дополнительная информация..."
               rows={3}
-              className="w-full p-4 rounded-xl glass border border-primary/10 bg-transparent text-foreground placeholder:text-foreground-tertiary focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+              className="w-full p-4 rounded-xl bg-white/5 border border-white/10 focus:border-primary outline-none resize-none"
             />
           </div>
+        </div>
 
-          {/* Submit */}
+        {/* Submit - Fixed at bottom */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-background border-t border-white/10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

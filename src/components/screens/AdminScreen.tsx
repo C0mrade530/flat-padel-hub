@@ -1,20 +1,27 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { Loader2, Settings, Plus, CreditCard, ClipboardList, Users, ChevronRight, TrendingUp, AlertCircle, Calendar, UserCheck } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { GlassButton } from "@/components/ui/GlassButton";
-import { Settings, Plus, CreditCard, ClipboardList, Users, ChevronRight, TrendingUp, AlertCircle } from "lucide-react";
-import { useAdminStats } from "@/hooks/useAdminStats";
+import { useAdminStats, RevenuePeriod } from "@/hooks/useAdminStats";
 import { useUser } from "@/contexts/UserContext";
 import { CreateEventSheet } from "@/components/admin/CreateEventSheet";
 import { PendingPaymentsSheet } from "@/components/admin/PendingPaymentsSheet";
 import { AllEventsSheet } from "@/components/admin/AllEventsSheet";
 import { UsersSheet } from "@/components/admin/UsersSheet";
 import { haptic } from "@/lib/telegram";
+import { cn } from "@/lib/utils";
+
+const revenuePeriods: { key: RevenuePeriod; label: string }[] = [
+  { key: "today", label: "Сегодня" },
+  { key: "week", label: "Неделя" },
+  { key: "month", label: "Месяц" },
+  { key: "all", label: "Всё" },
+];
 
 const AdminScreen = () => {
   const { isAdmin, isDevMode } = useUser();
-  const { stats, loading, error, refetch } = useAdminStats();
+  const { stats, loading, error, refetch, revenuePeriod, setRevenuePeriod } = useAdminStats();
   
   const [createEventOpen, setCreateEventOpen] = useState(false);
   const [pendingPaymentsOpen, setPendingPaymentsOpen] = useState(false);
@@ -108,11 +115,81 @@ const AdminScreen = () => {
         </div>
       )}
 
+      {/* Quick Stats - 3 columns */}
       <motion.div
-        className="grid grid-cols-2 gap-3 mb-6"
+        className="grid grid-cols-3 gap-3 mb-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+      >
+        <GlassCard className="p-3 text-center">
+          <Calendar className="w-4 h-4 text-primary mx-auto mb-1" />
+          <p className="text-2xl font-bold text-primary">{stats.activeEventsCount}</p>
+          <p className="text-xs text-foreground-tertiary">Активных</p>
+        </GlassCard>
+        <GlassCard className="p-3 text-center">
+          <CreditCard className="w-4 h-4 text-warning mx-auto mb-1" />
+          <p className="text-2xl font-bold text-warning">{stats.pendingPayments}</p>
+          <p className="text-xs text-foreground-tertiary">Ожидают</p>
+        </GlassCard>
+        <GlassCard className="p-3 text-center">
+          <UserCheck className="w-4 h-4 text-foreground-secondary mx-auto mb-1" />
+          <p className="text-2xl font-bold">{stats.totalParticipants}</p>
+          <p className="text-xs text-foreground-tertiary">Участников</p>
+        </GlassCard>
+      </motion.div>
+
+      {/* Revenue Card with Period Filter */}
+      <motion.div
+        className="mb-4"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
+      >
+        <div className="bg-gradient-to-r from-primary/20 to-cyan-500/20 rounded-2xl p-4 border border-primary/20">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              <span className="text-sm text-muted-foreground">Выручка</span>
+            </div>
+            <div className="flex gap-1">
+              {revenuePeriods.map((period) => (
+                <button
+                  key={period.key}
+                  onClick={() => {
+                    haptic.selection();
+                    setRevenuePeriod(period.key);
+                  }}
+                  className={cn(
+                    "px-2 py-1 text-xs rounded-lg transition-all",
+                    revenuePeriod === period.key
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-white/5 hover:bg-white/10"
+                  )}
+                >
+                  {period.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-3xl font-bold bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
+            {stats.revenue.toLocaleString("ru-RU")} ₽
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {revenuePeriod === "today" && "за сегодня"}
+            {revenuePeriod === "week" && "за последние 7 дней"}
+            {revenuePeriod === "month" && "за последние 30 дней"}
+            {revenuePeriod === "all" && "за всё время"}
+          </p>
+        </div>
+      </motion.div>
+
+      {/* Players Today Card */}
+      <motion.div
+        className="mb-6"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
       >
         <GlassCard className="p-4" gradient>
           <div className="flex items-center gap-2 mb-2">
@@ -121,18 +198,6 @@ const AdminScreen = () => {
           </div>
           <div className="text-3xl font-bold text-foreground mb-1">{stats.playersToday}</div>
           <div className="text-xs text-foreground-tertiary uppercase tracking-wide">Игроков сегодня</div>
-        </GlassCard>
-
-        <GlassCard className="p-4" gradient>
-          <div className="flex items-center gap-2 mb-2">
-            <CreditCard className="w-4 h-4 text-primary" />
-            <TrendingUp className="w-3 h-3 text-success" />
-          </div>
-          <div className="text-3xl font-bold text-foreground mb-1">
-            {stats.revenue.toLocaleString("ru-RU")}
-            <span className="text-lg text-foreground-secondary ml-1">₽</span>
-          </div>
-          <div className="text-xs text-foreground-tertiary uppercase tracking-wide">Выручка</div>
         </GlassCard>
       </motion.div>
 
