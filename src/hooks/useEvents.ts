@@ -32,7 +32,9 @@ export const useEvents = () => {
     setError(null);
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toISOString();
+      
+      console.log('Fetching events, now:', now);
       
       const { data, error: fetchError } = await supabase
         .from('events')
@@ -49,34 +51,51 @@ export const useEvents = () => {
             )
           )
         `)
-        .eq('status', 'scheduled')
-        .gte('event_date', today)
-        .order('event_date', { ascending: true })
-        .order('start_time', { ascending: true });
+        .eq('status', 'published')
+        .gte('event_date', now)
+        .order('event_date', { ascending: true });
+
+      console.log('Events loaded:', data, fetchError);
 
       if (fetchError) throw fetchError;
 
-      const transformed: TransformedEvent[] = (data || []).map((event: any) => ({
-        id: event.id,
-        type: event.event_type,
-        title: getEventTitle(event.event_type),
-        level: event.level || 'Все',
-        date: event.event_date,
-        startTime: event.start_time?.slice(0, 5) || '00:00',
-        endTime: event.end_time?.slice(0, 5) || '00:00',
-        location: event.location,
-        maxSeats: event.max_seats,
-        currentSeats: event.current_seats,
-        price: event.price,
-        description: event.description,
-        participants: event.event_participants
-          ?.filter((p: any) => p.status === 'confirmed' && p.users)
-          .map((p: any) => ({
-            id: p.users.id,
-            name: p.users.display_name,
-            avatar: p.users.avatar_url,
-          })) || [],
-      }));
+      const transformed: TransformedEvent[] = (data || []).map((event: any) => {
+        const eventDate = new Date(event.event_date);
+        const startTime = eventDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        
+        // Рассчитываем время окончания
+        const endDate = new Date(eventDate.getTime() + (event.duration_minutes || 120) * 60000);
+        const endTime = endDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        
+        // Определяем тип события по emoji
+        let eventType: 'training' | 'tournament' | 'stretching' | 'other' = 'training';
+        if (event.emoji === '🏆') eventType = 'tournament';
+        else if (event.emoji === '🧘' || event.emoji === '🤸') eventType = 'stretching';
+        else if (event.emoji === '🎯' || event.emoji === '🎾') eventType = 'training';
+        else eventType = 'other';
+
+        return {
+          id: event.id,
+          type: eventType,
+          title: event.title || getEventTitle(eventType),
+          level: event.level || 'Все',
+          date: eventDate.toISOString().split('T')[0],
+          startTime,
+          endTime,
+          location: event.location || '',
+          maxSeats: event.max_seats || 8,
+          currentSeats: event.current_seats || 0,
+          price: event.price || 0,
+          description: event.description,
+          participants: event.event_participants
+            ?.filter((p: any) => p.status === 'confirmed' && p.users)
+            .map((p: any) => ({
+              id: p.users.id,
+              name: p.users.display_name,
+              avatar: p.users.avatar_url,
+            })) || [],
+        };
+      });
 
       setEvents(transformed);
     } catch (err) {
