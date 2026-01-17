@@ -1,118 +1,83 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { DbUser } from '@/types/database';
+
+interface User {
+  id: string;
+  telegram_id: number | null;
+  username: string | null;
+  display_name: string;
+  phone: string | null;
+  level: string | null;
+  role: string;
+  avatar_url: string | null;
+  membership_status: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
 
 interface UserContextType {
-  user: DbUser | null;
+  user: User | null;
   loading: boolean;
-  isDevMode: boolean;
   isAdmin: boolean;
-  isTelegram: boolean;
+  isDevMode: boolean;
   refetchUser: () => Promise<void>;
 }
 
-const UserContext = createContext<UserContextType>({
-  user: null,
-  loading: true,
-  isDevMode: false,
+const UserContext = createContext<UserContextType>({ 
+  user: null, 
+  loading: true, 
   isAdmin: false,
-  isTelegram: false,
-  refetchUser: async () => {},
+  isDevMode: false,
+  refetchUser: async () => {}
 });
 
-export const useUser = () => useContext(UserContext);
-
-interface UserProviderProps {
-  children: ReactNode;
-}
-
-export const UserProvider = ({ children }: UserProviderProps) => {
-  const [user, setUser] = useState<DbUser | null>(null);
+export const UserProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDevMode, setIsDevMode] = useState(false);
-  const [isTelegram, setIsTelegram] = useState(false);
 
-  const fetchUser = async () => {
+  const loadUser = async () => {
     try {
-      setLoading(true);
+      // Пробуем получить telegram_id из Telegram WebApp
+      const tgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
       
-      const tg = window.Telegram?.WebApp;
-      const tgUser = tg?.initDataUnsafe?.user;
+      console.log('Loading user, tgId:', tgId);
       
-      // ОТЛАДКА - покажи в консоли
-      console.log('=== DEBUG ===');
-      console.log('Telegram WebApp:', tg);
-      console.log('TG User:', tgUser);
-      console.log('TG User ID:', tgUser?.id);
-      console.log('TG User ID type:', typeof tgUser?.id);
+      let query = supabase.from('users').select('*');
       
-      // Mark if running in Telegram
-      setIsTelegram(!!tg);
-      
-      if (tgUser?.id) {
-        // Ищем пользователя по telegram_id
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('telegram_id', tgUser.id)
-          .single();
-        
-        console.log('Supabase result:', { data, error });
-        
-        if (data && !error) {
-          setUser(data as DbUser);
-          setIsDevMode(false);
-          return;
-        } else {
-          console.log('User not found for telegram_id:', tgUser.id);
-        }
+      if (tgId) {
+        query = query.eq('telegram_id', tgId);
       }
       
-      // Fallback - если не в Telegram или пользователь не найден
-      // Берём первого пользователя для тестирования
-      console.log('Using fallback - loading first user');
-      const { data } = await supabase
-        .from('users')
-        .select('*')
-        .limit(1)
-        .single();
+      const { data, error } = await query.limit(1).maybeSingle();
       
-      console.log('Fallback user:', data);
+      console.log('User loaded:', data, error);
       
       if (data) {
-        setUser(data as DbUser);
-        setIsDevMode(!tgUser);
+        setUser(data);
+        // Если нет telegram_id в WebApp - это dev mode
+        setIsDevMode(!window.Telegram?.WebApp?.initDataUnsafe?.user?.id);
       }
-    } catch (err) {
-      console.error('Error:', err);
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchUser();
-    
-    // Initialize Telegram WebApp
-    const tg = (window as any).Telegram?.WebApp;
-    if (tg) {
-      tg.ready();
-      tg.expand();
-    }
+    loadUser();
+    window.Telegram?.WebApp?.ready();
+    window.Telegram?.WebApp?.expand();
   }, []);
 
-  const isAdmin = user?.role === 'owner' || user?.role === 'assistant';
+  const isAdmin = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'assistant';
 
   return (
-    <UserContext.Provider value={{ 
-      user, 
-      loading, 
-      isDevMode,
-      isAdmin,
-      isTelegram,
-      refetchUser: fetchUser 
-    }}>
+    <UserContext.Provider value={{ user, loading, isAdmin, isDevMode, refetchUser: loadUser }}>
       {children}
     </UserContext.Provider>
   );
 };
+
+export const useUser = () => useContext(UserContext);

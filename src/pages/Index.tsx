@@ -12,7 +12,7 @@ import { NotRegistered } from "@/components/NotRegistered";
 const AppContent = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [activeTab, setActiveTab] = useState("home");
-  const { user, loading, isAdmin, isTelegram } = useUser();
+  const { user, loading, isAdmin } = useUser();
 
   // Show loading during splash or data fetch
   if (loading) {
@@ -25,10 +25,7 @@ const AppContent = () => {
     );
   }
 
-  // Временно отключена проверка регистрации для тестирования
-  // if (isTelegram && !user) {
-  //   return <NotRegistered />;
-  // }
+  // Убрана проверка регистрации - показываем приложение всегда
 
   const renderScreen = () => {
     switch (activeTab) {
