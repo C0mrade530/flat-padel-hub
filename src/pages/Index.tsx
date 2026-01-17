@@ -7,11 +7,28 @@ import { ProfileScreen } from "@/components/screens/ProfileScreen";
 import { AdminScreen } from "@/components/screens/AdminScreen";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { UserProvider, useUser } from "@/contexts/UserContext";
+import { NotRegistered } from "@/components/NotRegistered";
 
 const AppContent = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [activeTab, setActiveTab] = useState("home");
-  const { isAdmin } = useUser();
+  const { user, loading, isAdmin, isTelegram } = useUser();
+
+  // Show loading during splash or data fetch
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <AnimatePresence>
+          <SplashScreen onComplete={() => setShowSplash(false)} />
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  // In Telegram but user not found/registered
+  if (isTelegram && !user) {
+    return <NotRegistered />;
+  }
 
   const renderScreen = () => {
     switch (activeTab) {
